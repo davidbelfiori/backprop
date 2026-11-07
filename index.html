@@ -1,0 +1,836 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Laboratorio interattivo sulla backpropagation: forward e backward pass passo per passo su una rete 2-3-2, con teoria e dimostrazioni.">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Backprop passo per passo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400&display=swap">
+<script>
+  window.MathJax = {
+    tex: { inlineMath: [['$', '$']], displayMath: [['$$', '$$']] },
+    svg: { fontCache: 'global' },
+    startup: {
+      pageReady: () => MathJax.startup.defaultPageReady().then(() => { window.__mjReady = true; if (window.__onMJ) window.__onMJ(); })
+    }
+  };
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js" async></script>
+<style>
+/* Layout: laboratorio interattivo in testa (rete + pannello), poi la teoria con indice laterale.
+   Due colori semantici: blu = segnale in avanti, arancio = gradiente all'indietro. */
+:root{
+  --paper:#F4F6F9; --surface:#FFFFFF; --ink:#151C28; --muted:#5B6578; --rule:#DAE0E8;
+  --edge:#9AA4B5; --fwd:#1F54D1; --fwd-soft:#E3EBFC; --bwd:#B93C0A; --bwd-soft:#FBE9DF;
+  --ok:#1E7B4A; --warn:#A35C00;
+  --f-display:"Source Serif 4", Georgia, "Times New Roman", serif;
+  --f-body:"Source Serif 4", Georgia, "Times New Roman", serif;
+  --f-ui:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono:"IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0E131A; --surface:#151B24; --ink:#E5E9F0; --muted:#97A1B2; --rule:#29323F;
+    --edge:#5C6676; --fwd:#7FA4FF; --fwd-soft:#1A2640; --bwd:#FF8B4E; --bwd-soft:#3A2116;
+    --ok:#5FD08F; --warn:#F0B35A; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0E131A; --surface:#151B24; --ink:#E5E9F0; --muted:#97A1B2; --rule:#29323F;
+  --edge:#5C6676; --fwd:#7FA4FF; --fwd-soft:#1A2640; --bwd:#FF8B4E; --bwd-soft:#3A2116;
+  --ok:#5FD08F; --warn:#F0B35A; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--paper); color:var(--ink); font-family:var(--f-ui); font-size:15px; line-height:1.5}
+.wrap{max-width:1200px; margin:0 auto; padding-left:max(16px, env(safe-area-inset-left, 0px)); padding-right:max(16px, env(safe-area-inset-right, 0px))}
+header.top{padding-block:40px 20px}
+.eyebrow{font-family:var(--f-ui); font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); margin:0 0 8px}
+h1{font-family:var(--f-display); font-weight:700; font-size:clamp(30px, 5vw, 46px); line-height:1.08; margin:0 0 12px; text-wrap:balance; letter-spacing:-.01em}
+.lead{font-family:var(--f-body); font-size:18px; max-width:68ch; color:var(--muted); margin:0}
+.lead b{color:var(--ink); font-weight:600}
+.k-fwd{color:var(--fwd); font-weight:600}
+.k-bwd{color:var(--bwd); font-weight:600}
+
+/* ---------- LAB ---------- */
+.lab{display:grid; grid-template-columns:minmax(0,1.55fr) minmax(0,1fr); gap:16px; padding-block:12px 8px}
+@media (max-width: 920px){ .lab{grid-template-columns:minmax(0,1fr)} }
+.card{background:var(--surface); border:1px solid var(--rule); border-radius:10px; min-width:0}
+.netcard{display:flex; flex-direction:column}
+.steps{display:flex; flex-wrap:wrap; gap:6px; padding:12px 12px 0}
+.chip{font:500 12px/1 var(--f-ui); padding:7px 9px; border-radius:999px; border:1px solid var(--rule); background:transparent; color:var(--muted); cursor:pointer; display:inline-flex; gap:6px; align-items:center}
+.chip .n{font-family:var(--f-mono); font-size:11px; opacity:.8}
+.chip.f.cur{background:var(--fwd-soft); color:var(--fwd); border-color:var(--fwd)}
+.chip.b.cur{background:var(--bwd-soft); color:var(--bwd); border-color:var(--bwd)}
+.chip.u.cur, .chip.i.cur{background:var(--ink); color:var(--surface); border-color:var(--ink)}
+.chip.past{color:var(--ink)}
+.chip:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible, .node:focus-visible{outline:2px solid var(--fwd); outline-offset:2px}
+.svgbox{overflow-x:auto; padding:4px 8px}
+#net{display:block; width:100%; min-width:520px; height:auto; user-select:none}
+.ctrl{display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:10px 12px 12px; border-top:1px solid var(--rule)}
+button.btn{font:500 14px/1 var(--f-ui); padding:9px 14px; border-radius:7px; border:1px solid var(--rule); background:var(--surface); color:var(--ink); cursor:pointer}
+button.btn:hover{border-color:var(--muted)}
+button.btn.primary{background:var(--ink); color:var(--surface); border-color:var(--ink)}
+button.btn:disabled{opacity:.45; cursor:default}
+.iter{margin-left:auto; font:13px var(--f-mono); color:var(--muted)}
+.legend{display:flex; flex-wrap:wrap; gap:14px; padding:0 12px 12px; font-size:12.5px; color:var(--muted)}
+.legend span{display:inline-flex; align-items:center; gap:6px}
+.sw{display:inline-block; width:22px; height:0; border-top:3px solid var(--fwd)}
+.sw.b{border-color:var(--bwd)} .sw.d{border-top-style:dashed; border-color:var(--edge)}
+
+/* svg */
+.node circle, .node rect{fill:var(--surface); stroke:var(--edge); stroke-width:1.5; transition:stroke .2s, fill .2s}
+.node.done circle, .node.done rect{stroke:var(--fwd)}
+.node.act-f circle, .node.act-f rect{stroke:var(--fwd); stroke-width:3.5; fill:var(--fwd-soft)}
+.node.act-b circle, .node.act-b rect{stroke:var(--bwd); stroke-width:3.5; fill:var(--bwd-soft)}
+.node.sel .ring{stroke:var(--ink); stroke-dasharray:3 3; fill:none; stroke-width:1.2}
+.node{cursor:pointer; outline:none}
+.node .ring{fill:none; stroke:none}
+.val{font:500 14px var(--f-mono); fill:var(--ink); text-anchor:middle; dominant-baseline:central}
+.val.unk{fill:var(--muted)}
+.lbl{font:600 13px var(--f-body); fill:var(--ink); text-anchor:middle}
+.sub{font:11.5px var(--f-mono); text-anchor:middle}
+.sub.z{fill:var(--fwd)} .sub.d{fill:var(--bwd)} .sub.m{fill:var(--muted)}
+.collab{font:500 11px var(--f-ui); letter-spacing:.1em; text-transform:uppercase; fill:var(--muted); text-anchor:middle}
+.edge{fill:none; stroke-linecap:round; transition:stroke .25s, opacity .25s, stroke-width .25s}
+.edge.idle{stroke:var(--edge)}
+.edge.fwd{stroke:var(--fwd)}
+.edge.done{stroke:var(--fwd); opacity:.32}
+.edge.bwd{stroke:var(--bwd)}
+.edge.bdone{stroke:var(--bwd); opacity:.32}
+.edge.upd{stroke:var(--ink); opacity:.8}
+.edge.selE{opacity:1 !important; filter:drop-shadow(0 0 2px var(--ink))}
+.hit{stroke:transparent; stroke-width:14; cursor:pointer; fill:none}
+.pulse-f{fill:var(--fwd)} .pulse-b{fill:var(--bwd)}
+
+/* panel */
+.side{display:flex; flex-direction:column; gap:16px; min-width:0}
+.panel{padding:16px 18px}
+.panel h2{font-family:var(--f-display); font-size:21px; margin:0 0 4px; line-height:1.2}
+.panel .tag{font:600 11px var(--f-ui); letter-spacing:.1em; text-transform:uppercase; margin:0 0 6px}
+.panel .tag.f{color:var(--fwd)} .panel .tag.b{color:var(--bwd)} .panel .tag.u{color:var(--muted)}
+.panel p{font-family:var(--f-body); font-size:15.5px; margin:8px 0}
+.panel a{color:inherit}
+.math{overflow-x:auto; overflow-y:hidden; font-size:14px; padding:2px 0}
+mjx-container[display="true"]{overflow-x:auto; overflow-y:hidden; max-width:100%; padding:2px 0}
+.insp h3{font:600 12px var(--f-ui); letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin:0 0 8px}
+.insp .who{font-family:var(--f-display); font-size:18px; font-weight:600; margin:0 0 10px}
+.kv{display:grid; grid-template-columns:auto 1fr; gap:4px 14px; font-size:13.5px; align-items:baseline}
+.kv dt{color:var(--muted); font-family:var(--f-body)}
+.kv dd{margin:0; font-family:var(--f-mono); font-variant-numeric:tabular-nums}
+.kv dd.f{color:var(--fwd)} .kv dd.b{color:var(--bwd)}
+.kv dd .pend{color:var(--muted); font-family:var(--f-ui); font-size:12.5px}
+.hint{font-size:12.5px; color:var(--muted); margin:10px 0 0}
+
+/* params */
+.params{display:grid; grid-template-columns:repeat(4, minmax(0,1fr)) minmax(0,1.3fr); gap:16px; padding:16px; margin-block:16px 8px; align-items:start}
+@media (max-width: 1000px){ .params{grid-template-columns:repeat(2, minmax(0,1fr))} .params .chart{grid-column:1 / -1} }
+@media (max-width: 460px){ .params{grid-template-columns:minmax(0,1fr)} }
+.field{display:flex; flex-direction:column; gap:6px; min-width:0}
+.field label, .grp-t{font:500 12px var(--f-ui); color:var(--muted); letter-spacing:.04em}
+.row{display:flex; align-items:center; gap:8px}
+.row output{font:13px var(--f-mono); min-width:46px; text-align:right; font-variant-numeric:tabular-nums}
+input[type=range]{flex:1; min-width:0; accent-color:var(--fwd)}
+select{font:14px var(--f-ui); padding:6px 8px; border-radius:6px; border:1px solid var(--rule); background:var(--surface); color:var(--ink)}
+.grp{display:flex; flex-direction:column; gap:10px; min-width:0}
+.chart svg{width:100%; height:auto; display:block}
+.chart .axis{stroke:var(--rule)} .chart .line{fill:none; stroke:var(--bwd); stroke-width:2}
+.chart .area{fill:var(--bwd-soft)} .chart text{font:11px var(--f-mono); fill:var(--muted)}
+.chart .dot{fill:var(--bwd)}
+
+/* ---------- THEORY ---------- */
+.theory{display:grid; grid-template-columns:200px minmax(0,1fr); gap:40px; padding-block:48px 80px; border-top:1px solid var(--rule); margin-top:32px}
+@media (max-width: 920px){ .theory{grid-template-columns:minmax(0,1fr); gap:16px} .toc{position:static !important} }
+.toc{position:sticky; top:calc(env(safe-area-inset-top, 0px) + 16px); align-self:start; font-size:13.5px}
+.toc p{font:600 12px var(--f-ui); letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin:0 0 10px}
+.toc ol{margin:0; padding-left:20px; display:flex; flex-direction:column; gap:6px}
+.toc a{color:var(--ink); text-decoration:none} .toc a:hover{color:var(--fwd)}
+article{font-family:var(--f-body); font-size:17.5px; line-height:1.65; max-width:72ch; min-width:0}
+article h2{font-family:var(--f-display); font-size:28px; line-height:1.2; margin:56px 0 12px; text-wrap:balance}
+article h2:first-child{margin-top:0}
+article h2 .sec{font-family:var(--f-mono); font-size:15px; color:var(--muted); font-weight:400; margin-right:10px}
+article h3{font-family:var(--f-display); font-size:20px; margin:32px 0 8px}
+article p{margin:12px 0}
+article .eq{overflow-x:auto; overflow-y:hidden}
+.box{border:1px solid var(--rule); background:var(--surface); border-radius:10px; padding:14px 18px; margin:20px 0}
+.box.bp{border-left:4px solid var(--bwd)}
+.box .bt{font:600 12px var(--f-ui); letter-spacing:.1em; text-transform:uppercase; color:var(--bwd); margin:0 0 4px}
+.proof{font-size:16.5px; color:var(--ink)}
+.proof .pt{font-style:italic}
+.qed{float:right; color:var(--muted)}
+pre.code{font:14px/1.6 var(--f-mono); background:var(--surface); border:1px solid var(--rule); border-radius:10px; padding:16px 18px; overflow-x:auto; margin:20px 0}
+pre.code .c{color:var(--muted)} pre.code .f{color:var(--fwd)} pre.code .b{color:var(--bwd)}
+.tablewrap{overflow-x:auto; margin:16px 0}
+table{border-collapse:collapse; width:100%; font-size:14px; font-family:var(--f-ui)}
+th, td{padding:7px 10px; border-bottom:1px solid var(--rule); text-align:right; white-space:nowrap}
+th{font-weight:600; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted)}
+td:first-child, th:first-child{text-align:left}
+td.num{font-family:var(--f-mono); font-variant-numeric:tabular-nums}
+td.ok{color:var(--ok)} td.warn{color:var(--warn)}
+.note{font-size:15px; color:var(--muted)}
+
+/* chain demo */
+.demo{background:var(--surface); border:1px solid var(--rule); border-radius:10px; padding:14px; margin:20px 0; font-family:var(--f-ui); font-size:14px}
+.demo svg{width:100%; min-width:560px; height:auto; display:block}
+.demo .svgbox{padding:0}
+.demo .sliders{display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:12px; margin-top:10px}
+@media (max-width:560px){ .demo .sliders{grid-template-columns:repeat(2, minmax(0,1fr))} }
+.dn rect{fill:var(--surface); stroke:var(--edge); stroke-width:1.5}
+.dn.op rect{fill:var(--paper)}
+.dn text.op{font:600 16px var(--f-body); fill:var(--ink); text-anchor:middle; dominant-baseline:central}
+.dn text.fv{font:12px var(--f-mono); fill:var(--fwd); text-anchor:middle}
+.dn text.gv{font:12px var(--f-mono); fill:var(--bwd); text-anchor:middle}
+.dl{stroke:var(--edge); stroke-width:1.5; fill:none}
+.chainlist{font:13.5px/1.9 var(--f-mono); margin:10px 0 0; padding:0; list-style:none; overflow-x:auto; white-space:nowrap}
+.chainlist .g{color:var(--bwd)} .chainlist .l{color:var(--muted)}
+footer{padding-block:24px 40px; color:var(--muted); font-size:13px; border-top:1px solid var(--rule)}
+@media (prefers-reduced-motion: reduce){ *{transition:none !important} }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="top">
+    <p class="eyebrow">Machine Learning · Reti neurali</p>
+    <h1>Backpropagation, passo per passo</h1>
+    <p class="lead">Una rete 2–3–2 vera, con numeri veri. Avanza un passo alla volta: il segnale scorre <span class="k-fwd">in avanti</span> per calcolare la loss, poi il gradiente torna <span class="k-bwd">all'indietro</span> con la regola della catena. Clicca su un neurone o su un peso per vedere ogni quantità. Sotto trovi la teoria completa, con le dimostrazioni.</p>
+  </header>
+
+  <section class="lab" aria-label="Laboratorio interattivo">
+    <div class="card netcard">
+      <div class="steps" id="chips" role="tablist" aria-label="Passi dell'algoritmo"></div>
+      <div class="svgbox"><svg id="net" viewBox="0 0 800 420" role="img" aria-label="Rete neurale con 2 input, 3 neuroni nascosti, 2 output e la loss"></svg></div>
+      <div class="legend">
+        <span><i class="sw"></i>forward (peso positivo)</span>
+        <span><i class="sw d"></i>peso negativo</span>
+        <span><i class="sw b"></i>backward (spessore ∝ |gradiente|)</span>
+        <span>dentro il nodo: attivazione <i>a</i></span>
+      </div>
+      <div class="ctrl">
+        <button class="btn" id="prev" aria-label="Passo precedente">← Indietro</button>
+        <button class="btn primary" id="next" aria-label="Passo successivo">Avanti →</button>
+        <button class="btn" id="play">▶ Riproduci</button>
+        <span class="iter" id="iter">iterazione 1</span>
+      </div>
+    </div>
+
+    <div class="side">
+      <div class="card panel" id="panel" aria-live="polite"></div>
+      <div class="card panel insp" id="insp"></div>
+    </div>
+  </section>
+
+  <section class="card params" aria-label="Parametri">
+    <div class="grp">
+      <span class="grp-t">Input x</span>
+      <div class="field"><label for="x1">x₁</label><div class="row"><input type="range" id="x1" min="-2" max="2" step="0.05" value="0.6"><output id="x1o"></output></div></div>
+      <div class="field"><label for="x2">x₂</label><div class="row"><input type="range" id="x2" min="-2" max="2" step="0.05" value="-0.4"><output id="x2o"></output></div></div>
+    </div>
+    <div class="grp">
+      <span class="grp-t">Target y</span>
+      <div class="field"><label for="y1">y₁</label><div class="row"><input type="range" id="y1" min="0" max="1" step="0.05" value="1"><output id="y1o"></output></div></div>
+      <div class="field"><label for="y2">y₂</label><div class="row"><input type="range" id="y2" min="0" max="1" step="0.05" value="0"><output id="y2o"></output></div></div>
+    </div>
+    <div class="grp">
+      <div class="field"><label for="hact">Attivazione nascosta σ⁽¹⁾</label>
+        <select id="hact"><option value="sigmoid">sigmoide</option><option value="tanh">tanh</option><option value="relu">ReLU</option></select></div>
+      <div class="field"><label for="oact">Attivazione di output σ⁽²⁾</label>
+        <select id="oact"><option value="sigmoid">sigmoide</option><option value="linear">lineare (identità)</option></select></div>
+    </div>
+    <div class="grp">
+      <div class="field"><label for="lr">Learning rate η</label><div class="row"><input type="range" id="lr" min="0.05" max="3" step="0.05" value="0.5"><output id="lro"></output></div></div>
+      <div class="row" style="flex-wrap:wrap">
+        <button class="btn" id="rand">Nuovi pesi</button>
+        <button class="btn" id="train">Allena 200 passi</button>
+      </div>
+    </div>
+    <div class="grp chart">
+      <span class="grp-t">Loss per iterazione</span>
+      <svg id="chart" viewBox="0 0 320 130" aria-label="Andamento della loss"></svg>
+    </div>
+  </section>
+
+  <section class="theory" aria-label="Teoria">
+    <nav class="toc" aria-label="Indice">
+      <p>Teoria</p>
+      <ol>
+        <li><a href="#notazione">Notazione</a></li>
+        <li><a href="#catena">Regola della catena</a></li>
+        <li><a href="#delta">L'errore δ</a></li>
+        <li><a href="#equazioni">Le quattro equazioni</a></li>
+        <li><a href="#algoritmo">Algoritmo</a></li>
+        <li><a href="#batch">Mini-batch</a></li>
+        <li><a href="#costo">Costo computazionale</a></li>
+        <li><a href="#verifica">Verifica numerica</a></li>
+        <li><a href="#svanisce">Gradiente che svanisce</a></li>
+      </ol>
+    </nav>
+
+    <article>
+      <h2 id="notazione"><span class="sec">§1</span>Notazione</h2>
+      <p>Consideriamo una rete feed-forward con $L$ strati. Lo strato $l$ ha $n_l$ neuroni; lo strato $0$ è l'input. Per ogni strato $l = 1,\dots,L$ ci sono una matrice dei pesi $W^{(l)} \in \mathbb{R}^{n_l \times n_{l-1}}$ e un vettore di bias $b^{(l)} \in \mathbb{R}^{n_l}$. L'elemento $w^{(l)}_{ij}$ è il peso che collega il neurone $j$ dello strato $l-1$ al neurone $i$ dello strato $l$: prima l'indice di arrivo, poi quello di partenza.</p>
+      <p>Il <b>forward pass</b> è definito ricorsivamente:</p>
+      <div class="eq">$$a^{(0)} = x,\qquad z^{(l)} = W^{(l)}a^{(l-1)} + b^{(l)},\qquad a^{(l)} = \sigma^{(l)}\!\big(z^{(l)}\big),\qquad l = 1,\dots,L.$$</div>
+      <p>$z^{(l)}$ è la <i>pre-attivazione</i> (somma pesata), $a^{(l)}$ l'<i>attivazione</i>; la funzione $\sigma^{(l)}$ si applica componente per componente. In componenti:</p>
+      <div class="eq">$$z^{(l)}_i = \sum_{j=1}^{n_{l-1}} w^{(l)}_{ij}\,a^{(l-1)}_j + b^{(l)}_i .$$</div>
+      <p>L'output è $\hat y = a^{(L)}$ e la loss su un esempio $(x,y)$ è una funzione scalare $\mathcal L(\hat y, y)$. Nel laboratorio usiamo l'errore quadratico</p>
+      <div class="eq">$$\mathcal L = \tfrac12\,\big\|a^{(L)} - y\big\|^2 = \tfrac12\sum_{k}\big(a^{(L)}_k - y_k\big)^2 .$$</div>
+      <p>L'obiettivo della backpropagation è calcolare <b>tutte</b> le derivate parziali $\partial\mathcal L/\partial w^{(l)}_{ij}$ e $\partial\mathcal L/\partial b^{(l)}_i$, che servono alla discesa del gradiente $\theta \leftarrow \theta - \eta\,\nabla_\theta\mathcal L$. La rete del laboratorio ha $L = 2$, $n_0 = 2$, $n_1 = 3$, $n_2 = 2$: in totale $6 + 3 + 6 + 2 = 17$ parametri.</p>
+      <p>Derivate delle attivazioni usate:</p>
+      <div class="eq">$$\sigma(z) = \frac{1}{1+e^{-z}},\ \ \sigma'(z) = \sigma(z)\big(1-\sigma(z)\big);\qquad \tanh'(z) = 1-\tanh^2 z;\qquad \mathrm{ReLU}'(z) = \mathbb{1}[z>0].$$</div>
+
+      <h2 id="catena"><span class="sec">§2</span>Regola della catena</h2>
+      <p>Se $\mathcal L$ dipende da una variabile $t$ solo attraverso le variabili intermedie $u_1,\dots,u_m$, allora</p>
+      <div class="eq">$$\frac{\partial \mathcal L}{\partial t} = \sum_{k=1}^{m}\frac{\partial \mathcal L}{\partial u_k}\,\frac{\partial u_k}{\partial t}.$$</div>
+      <p>In forma vettoriale è il prodotto di Jacobiane: $\dfrac{\partial \mathcal L}{\partial t} = \dfrac{\partial \mathcal L}{\partial u}\,\dfrac{\partial u}{\partial t}$. Applicata a un grafo computazionale, dice che la derivata di $\mathcal L$ rispetto a un nodo è la somma, su tutti i cammini dal nodo a $\mathcal L$, del prodotto delle derivate locali lungo il cammino.</p>
+      <p>Il problema è che in una rete profonda il numero di cammini cresce come $\prod_l n_l$, cioè in modo esponenziale con la profondità. La backpropagation evita di enumerarli: calcola le derivate dall'uscita verso l'ingresso e <b>riusa</b> ciascun risultato intermedio. È programmazione dinamica sul grafo.</p>
+
+      <h3>Esempio su un solo neurone</h3>
+      <p>Il grafo sotto calcola $\mathcal L = \tfrac12(\sigma(wx+b) - y)^2$. Sopra ogni nodo c'è il valore del forward (blu), sotto il gradiente $\partial\mathcal L/\partial(\cdot)$ (arancio). Ogni gradiente si ottiene moltiplicando il gradiente del nodo a valle per la derivata locale: <i>gradiente in ingresso = gradiente in uscita × derivata locale</i>.</p>
+      <div class="demo">
+        <div class="svgbox"><svg id="chain" viewBox="0 0 780 260" aria-label="Grafo computazionale di un neurone"></svg></div>
+        <ul class="chainlist" id="chainlist"></ul>
+        <div class="sliders">
+          <div class="field"><label for="cx">x</label><div class="row"><input type="range" id="cx" min="-2" max="2" step="0.05" value="1.5"><output id="cxo"></output></div></div>
+          <div class="field"><label for="cw">w</label><div class="row"><input type="range" id="cw" min="-2" max="2" step="0.05" value="0.8"><output id="cwo"></output></div></div>
+          <div class="field"><label for="cb">b</label><div class="row"><input type="range" id="cb" min="-2" max="2" step="0.05" value="-0.5"><output id="cbo"></output></div></div>
+          <div class="field"><label for="cy">y</label><div class="row"><input type="range" id="cy" min="0" max="1" step="0.05" value="0"><output id="cyo"></output></div></div>
+        </div>
+      </div>
+      <p>Nota che $\partial\mathcal L/\partial w = \partial\mathcal L/\partial z \cdot x$: il gradiente di un peso è il gradiente "che arriva" al neurone moltiplicato per il valore che entra dal peso. Questa è, in piccolo, l'equazione BP4.</p>
+
+      <h2 id="delta"><span class="sec">§3</span>L'errore δ</h2>
+      <p>Definiamo l'<b>errore</b> del neurone $i$ nello strato $l$ come la derivata della loss rispetto alla sua pre-attivazione:</p>
+      <div class="eq">$$\delta^{(l)}_i := \frac{\partial \mathcal L}{\partial z^{(l)}_i},\qquad \delta^{(l)} \in \mathbb{R}^{n_l}.$$</div>
+      <p>La scelta di $z$ non è casuale. Ogni parametro dello strato $l$ influenza la loss soltanto attraverso $z^{(l)}$, e lo strato $l$ influenza tutto ciò che segue soltanto attraverso $z^{(l+1)}$. Quindi $\delta^{(l)}$ è esattamente l'informazione che serve: una volta noto, i gradienti dei parametri dello strato si ottengono localmente, e $\delta^{(l-1)}$ si ricava da $\delta^{(l)}$ senza guardare oltre.</p>
+
+      <h2 id="equazioni"><span class="sec">§4</span>Le quattro equazioni</h2>
+      <p>Uso $\odot$ per il prodotto componente per componente (Hadamard) e scrivo $\sigma'$ al posto di $\sigma'^{(l)}$ quando lo strato è chiaro.</p>
+
+      <div class="box bp" id="bp1"><p class="bt">BP1 · errore dello strato di output</p>
+      <div class="eq">$$\delta^{(L)}_i = \frac{\partial \mathcal L}{\partial a^{(L)}_i}\,\sigma'\big(z^{(L)}_i\big)\qquad\Longleftrightarrow\qquad \delta^{(L)} = \nabla_{a^{(L)}}\mathcal L \odot \sigma'\big(z^{(L)}\big)$$</div></div>
+      <p class="proof"><span class="pt">Dimostrazione.</span> Per la regola della catena $\delta^{(L)}_i = \sum_k \frac{\partial \mathcal L}{\partial a^{(L)}_k}\frac{\partial a^{(L)}_k}{\partial z^{(L)}_i}$. Poiché l'attivazione agisce componente per componente, $a^{(L)}_k = \sigma(z^{(L)}_k)$ dipende solo da $z^{(L)}_k$: dunque $\partial a^{(L)}_k/\partial z^{(L)}_i = \sigma'(z^{(L)}_i)$ se $k=i$ e $0$ altrimenti. Della somma resta un solo termine. <span class="qed">∎</span></p>
+      <p>Per l'errore quadratico $\nabla_{a^{(L)}}\mathcal L = a^{(L)} - y$, quindi $\delta^{(L)} = (a^{(L)}-y)\odot\sigma'(z^{(L)})$.</p>
+      <p class="note">Osservazione: con softmax in uscita la Jacobiana $\partial a/\partial z$ non è diagonale e BP1 va scritta come $\delta^{(L)} = \big(\partial a^{(L)}/\partial z^{(L)}\big)^{\!\top}\nabla_{a^{(L)}}\mathcal L$. Con la cross-entropy $\mathcal L = -\sum_i y_i\log a^{(L)}_i$ (con $\sum_i y_i = 1$) il risultato si semplifica in $\delta^{(L)} = a^{(L)} - y$. Lo stesso vale per sigmoide con cross-entropy binaria.</p>
+
+      <div class="box bp" id="bp2"><p class="bt">BP2 · propagazione dell'errore all'indietro</p>
+      <div class="eq">$$\delta^{(l)}_j = \sigma'\big(z^{(l)}_j\big)\sum_{i=1}^{n_{l+1}} w^{(l+1)}_{ij}\,\delta^{(l+1)}_i\qquad\Longleftrightarrow\qquad \delta^{(l)} = \Big(\big(W^{(l+1)}\big)^{\!\top}\delta^{(l+1)}\Big)\odot\sigma'\big(z^{(l)}\big)$$</div></div>
+      <p class="proof"><span class="pt">Dimostrazione.</span> $z^{(l)}_j$ influenza $\mathcal L$ solo attraverso $z^{(l+1)}_1,\dots,z^{(l+1)}_{n_{l+1}}$, quindi $\delta^{(l)}_j = \sum_i \frac{\partial \mathcal L}{\partial z^{(l+1)}_i}\frac{\partial z^{(l+1)}_i}{\partial z^{(l)}_j} = \sum_i \delta^{(l+1)}_i\frac{\partial z^{(l+1)}_i}{\partial z^{(l)}_j}$. Da $z^{(l+1)}_i = \sum_k w^{(l+1)}_{ik}\,\sigma(z^{(l)}_k) + b^{(l+1)}_i$ segue $\frac{\partial z^{(l+1)}_i}{\partial z^{(l)}_j} = w^{(l+1)}_{ij}\,\sigma'(z^{(l)}_j)$. Sostituendo e raccogliendo $\sigma'(z^{(l)}_j)$ si ottiene la tesi. <span class="qed">∎</span></p>
+      <p>Leggila così: l'errore percorre gli stessi archi del forward, in senso opposto, pesato dagli stessi pesi. La trasposta compare perché nel forward $w_{ij}$ porta da $j$ a $i$, nel backward da $i$ a $j$. Poi l'errore viene "filtrato" da $\sigma'$: un neurone saturo ($\sigma'\approx 0$) blocca il gradiente.</p>
+
+      <div class="box bp" id="bp3"><p class="bt">BP3 · gradiente dei bias</p>
+      <div class="eq">$$\frac{\partial \mathcal L}{\partial b^{(l)}_i} = \delta^{(l)}_i\qquad\Longleftrightarrow\qquad \nabla_{b^{(l)}}\mathcal L = \delta^{(l)}$$</div></div>
+      <p class="proof"><span class="pt">Dimostrazione.</span> $b^{(l)}_i$ compare solo in $z^{(l)}_i$, con $\partial z^{(l)}_i/\partial b^{(l)}_i = 1$. Quindi $\frac{\partial \mathcal L}{\partial b^{(l)}_i} = \delta^{(l)}_i\cdot 1$. <span class="qed">∎</span></p>
+
+      <div class="box bp" id="bp4"><p class="bt">BP4 · gradiente dei pesi</p>
+      <div class="eq">$$\frac{\partial \mathcal L}{\partial w^{(l)}_{ij}} = \delta^{(l)}_i\,a^{(l-1)}_j\qquad\Longleftrightarrow\qquad \nabla_{W^{(l)}}\mathcal L = \delta^{(l)}\big(a^{(l-1)}\big)^{\!\top}$$</div></div>
+      <p class="proof"><span class="pt">Dimostrazione.</span> $w^{(l)}_{ij}$ compare solo in $z^{(l)}_i = \sum_k w^{(l)}_{ik}a^{(l-1)}_k + b^{(l)}_i$, con $\partial z^{(l)}_i/\partial w^{(l)}_{ij} = a^{(l-1)}_j$. Quindi $\frac{\partial \mathcal L}{\partial w^{(l)}_{ij}} = \delta^{(l)}_i\,a^{(l-1)}_j$. In forma matriciale è il prodotto esterno di $\delta^{(l)} \in \mathbb{R}^{n_l}$ e $a^{(l-1)} \in \mathbb{R}^{n_{l-1}}$, che ha la stessa forma $n_l\times n_{l-1}$ di $W^{(l)}$. <span class="qed">∎</span></p>
+      <p>Conseguenza pratica: il gradiente di un peso è grande solo se il neurone di arrivo ha errore grande <i>e</i> il neurone di partenza è attivo. Un peso che esce da un neurone con $a\approx 0$ impara lentamente.</p>
+
+      <h2 id="algoritmo"><span class="sec">§5</span>Algoritmo</h2>
+      <p>Per un esempio $(x,y)$:</p>
+<pre class="code"><span class="c"># 1. forward: calcola e MEMORIZZA z e a di ogni strato</span>
+<span class="f">a[0] = x
+for l = 1 … L:
+    z[l] = W[l] @ a[l-1] + b[l]
+    a[l] = σ_l(z[l])</span>
+
+<span class="c"># 2. errore di output (BP1)</span>
+<span class="b">δ[L] = grad_a Loss(a[L], y) ⊙ σ'_L(z[L])</span>
+
+<span class="c"># 3. backward: dall'ultimo strato al primo (BP2, BP3, BP4)</span>
+<span class="b">for l = L … 1:
+    dW[l] = δ[l] @ a[l-1].T
+    db[l] = δ[l]
+    if l > 1:
+        δ[l-1] = (W[l].T @ δ[l]) ⊙ σ'_{l-1}(z[l-1])</span>
+
+<span class="c"># 4. aggiornamento (discesa del gradiente)</span>
+for l = 1 … L:
+    W[l] -= η · dW[l]
+    b[l] -= η · db[l]</pre>
+      <p>Due dettagli che contano. Il backward usa i valori $z^{(l)}$ e $a^{(l)}$ salvati durante il forward, quindi vanno tenuti in memoria. E $\delta^{(l-1)}$ si calcola con i pesi $W^{(l)}$ <i>prima</i> dell'aggiornamento: si calcolano tutti i gradienti, poi si aggiorna.</p>
+
+      <h2 id="batch"><span class="sec">§6</span>Mini-batch in forma matriciale</h2>
+      <p>Con $m$ esempi la loss è la media $\mathcal L = \frac1m\sum_{s=1}^m \mathcal L^{(s)}$, e per linearità il gradiente è la media dei gradienti. Impilando gli esempi in colonna, $A^{(0)} = X \in \mathbb{R}^{n_0\times m}$:</p>
+      <div class="eq">$$Z^{(l)} = W^{(l)}A^{(l-1)} + b^{(l)}\mathbf 1_m^{\!\top},\qquad A^{(l)} = \sigma\big(Z^{(l)}\big),$$</div>
+      <div class="eq">$$\Delta^{(l)} = \Big(\big(W^{(l+1)}\big)^{\!\top}\Delta^{(l+1)}\Big)\odot\sigma'\big(Z^{(l)}\big),\qquad \nabla_{W^{(l)}}\mathcal L = \tfrac1m\,\Delta^{(l)}\big(A^{(l-1)}\big)^{\!\top},\qquad \nabla_{b^{(l)}}\mathcal L = \tfrac1m\,\Delta^{(l)}\mathbf 1_m,$$</div>
+      <p>dove la colonna $s$ di $\Delta^{(l)}$ è il vettore $\delta^{(l)}$ dell'esempio $s$. Il prodotto $\Delta^{(l)}(A^{(l-1)})^\top$ somma automaticamente i prodotti esterni di tutti gli esempi.</p>
+
+      <h2 id="costo"><span class="sec">§7</span>Costo computazionale</h2>
+      <p>Sia $P = \sum_l n_l n_{l-1}$ il numero di pesi. Il forward costa $O(P)$ moltiplicazioni: ogni peso si usa una volta. Nel backward BP2 costa $n_{l+1}n_l$ operazioni per strato e BP4 ne costa $n_l n_{l-1}$, quindi anche il backward è $O(P)$, circa il doppio del forward. Un passo completo costa quindi qualche volta un forward.</p>
+      <p>L'alternativa ingenua, le differenze finite, richiede due forward per <i>ciascun</i> parametro: costo $O(P^2)$. Con $P = 10^6$ la differenza è un fattore dell'ordine di $10^6$.</p>
+      <p>In termini di differenziazione automatica, la backpropagation è la <b>modalità inversa</b> (reverse mode). È efficiente perché la funzione ha molti input (i parametri) e un solo output scalare (la loss): una sola passata all'indietro dà il gradiente completo. La modalità diretta (forward mode) richiederebbe una passata per ogni parametro. Il prezzo della modalità inversa è la memoria: tutte le attivazioni del forward vanno conservate.</p>
+
+      <h2 id="verifica"><span class="sec">§8</span>Verifica numerica del gradiente</h2>
+      <p>Per controllare un'implementazione si confronta ogni derivata con la differenza finita centrata, che ha errore $O(\varepsilon^2)$:</p>
+      <div class="eq">$$\frac{\partial \mathcal L}{\partial \theta_k} \approx \frac{\mathcal L(\theta + \varepsilon e_k) - \mathcal L(\theta - \varepsilon e_k)}{2\varepsilon},\qquad \text{errore relativo} = \frac{|g_{\text{bp}} - g_{\text{num}}|}{\max\big(|g_{\text{bp}}| + |g_{\text{num}}|,\ 10^{-12}\big)}.$$</div>
+      <p>La tabella confronta, sui 17 parametri della rete del laboratorio e con lo stato attuale, i gradienti della backpropagation con quelli numerici ($\varepsilon = 10^{-5}$). Si aggiorna quando cambi input, target, attivazioni o pesi. Un errore relativo sotto $10^{-7}$ indica un'implementazione corretta. Con ReLU può comparire un errore grande se una pre-attivazione è vicinissima a $0$, dove la funzione non è derivabile.</p>
+      <div class="tablewrap"><table id="gc"><thead><tr><th>Parametro</th><th>Backprop</th><th>Differenze finite</th><th>Errore relativo</th></tr></thead><tbody></tbody></table></div>
+
+      <h2 id="svanisce"><span class="sec">§9</span>Gradiente che svanisce</h2>
+      <p>Srotolando BP2 da $L$ fino allo strato $l$, con $D^{(k)} = \mathrm{diag}\big(\sigma'(z^{(k)})\big)$:</p>
+      <div class="eq">$$\delta^{(l)} = D^{(l)}\big(W^{(l+1)}\big)^{\!\top} D^{(l+1)}\big(W^{(l+2)}\big)^{\!\top}\cdots D^{(L-1)}\big(W^{(L)}\big)^{\!\top}\delta^{(L)},$$</div>
+      <div class="eq">$$\big\|\delta^{(l)}\big\| \le \big\|\delta^{(L)}\big\|\prod_{k=l}^{L-1}\big\|D^{(k)}\big\|\,\big\|W^{(k+1)}\big\|.$$</div>
+      <p>Per la sigmoide $\sigma'(z) \le 1/4$, quindi $\|D^{(k)}\| \le 1/4$: se i pesi non sono grandi, l'errore si riduce di un fattore almeno $4$ per strato e gli strati iniziali smettono di imparare. Se invece i prodotti $\|D\|\|W\|$ superano $1$, il gradiente esplode. Le soluzioni standard agiscono proprio su questi fattori: ReLU (derivata $1$ dove è attiva), inizializzazioni come Xavier e He (tengono $\|W\|$ vicino alla scala giusta), batch normalization, connessioni residue (aggiungono un termine identità alla Jacobiana).</p>
+      <p>Nel laboratorio puoi vederlo in piccolo: con la sigmoide gli errori $\delta^{(1)}$ dello strato nascosto sono in genere molto più piccoli di $\delta^{(2)}$.</p>
+    </article>
+  </section>
+  <footer>Tutti i calcoli avvengono nel browser, in doppia precisione. I numeri sono arrotondati a 3 decimali solo per la visualizzazione.</footer>
+</div>
+
+<script>
+(() => {
+'use strict';
+const NS = 'http://www.w3.org/2000/svg';
+const $ = id => document.getElementById(id);
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------------- matematica ---------------- */
+const sig = z => 1 / (1 + Math.exp(-z));
+const ACT = {
+  sigmoid: { f: sig, d: z => { const s = sig(z); return s * (1 - s); }, tex: '\\sigma' },
+  tanh:    { f: Math.tanh, d: z => 1 - Math.tanh(z) ** 2, tex: '\\tanh' },
+  relu:    { f: z => Math.max(0, z), d: z => z > 0 ? 1 : 0, tex: '\\mathrm{ReLU}' },
+  linear:  { f: z => z, d: () => 1, tex: '\\mathrm{id}' }
+};
+
+function mulberry32(a){ return function(){ a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+let rng = mulberry32(7);
+const r = () => Math.round((rng() * 2 - 1) * 100) / 100;
+function randomParams(){
+  return { W1: [[r(), r()], [r(), r()], [r(), r()]], b1: [r() * .5, r() * .5, r() * .5],
+           W2: [[r(), r(), r()], [r(), r(), r()]], b2: [r() * .5, r() * .5] };
+}
+const clone = P => JSON.parse(JSON.stringify(P));
+
+function forward(P, x, ha, oa){
+  const z1 = P.W1.map((row, i) => row[0] * x[0] + row[1] * x[1] + P.b1[i]);
+  const a1 = z1.map(ACT[ha].f);
+  const z2 = P.W2.map((row, k) => row[0] * a1[0] + row[1] * a1[1] + row[2] * a1[2] + P.b2[k]);
+  const a2 = z2.map(ACT[oa].f);
+  const L = 0.5 * a2.reduce((s, a, k) => s + (a - S.y[k]) ** 2, 0);
+  return { z1, a1, z2, a2, L };
+}
+function backward(P, x, y, c, ha, oa){
+  const dz2 = c.z2.map(ACT[oa].d), dz1 = c.z1.map(ACT[ha].d);
+  const d2 = c.a2.map((a, k) => (a - y[k]) * dz2[k]);
+  const gW2 = d2.map(d => c.a1.map(a => d * a));
+  const back = [0, 1, 2].map(i => P.W2[0][i] * d2[0] + P.W2[1][i] * d2[1]);
+  const d1 = back.map((s, i) => s * dz1[i]);
+  const gW1 = d1.map(d => x.map(xx => d * xx));
+  return { dz2, dz1, d2, gW2, gb2: d2.slice(), back, d1, gW1, gb1: d1.slice() };
+}
+function step_(P, g, lr){
+  const Q = clone(P);
+  Q.W1 = Q.W1.map((row, i) => row.map((w, j) => w - lr * g.gW1[i][j]));
+  Q.b1 = Q.b1.map((b, i) => b - lr * g.gb1[i]);
+  Q.W2 = Q.W2.map((row, k) => row.map((w, i) => w - lr * g.gW2[k][i]));
+  Q.b2 = Q.b2.map((b, k) => b - lr * g.gb2[k]);
+  return Q;
+}
+const flat = P => [...P.W1.flat(), ...P.b1, ...P.W2.flat(), ...P.b2];
+function unflat(v){ return { W1: [[v[0], v[1]], [v[2], v[3]], [v[4], v[5]]], b1: [v[6], v[7], v[8]], W2: [[v[9], v[10], v[11]], [v[12], v[13], v[14]]], b2: [v[15], v[16]] }; }
+const flatG = g => [...g.gW1.flat(), ...g.gb1, ...g.gW2.flat(), ...g.gb2];
+const PNAMES = (() => {
+  const n = [];
+  for (let i = 1; i <= 3; i++) for (let j = 1; j <= 2; j++) n.push(`w<sup>(1)</sup><sub>${i}${j}</sub>`);
+  for (let i = 1; i <= 3; i++) n.push(`b<sup>(1)</sup><sub>${i}</sub>`);
+  for (let k = 1; k <= 2; k++) for (let i = 1; i <= 3; i++) n.push(`w<sup>(2)</sup><sub>${k}${i}</sub>`);
+  for (let k = 1; k <= 2; k++) n.push(`b<sup>(2)</sup><sub>${k}</sub>`);
+  return n;
+})();
+
+/* ---------------- stato ---------------- */
+const S = { x: [0.6, -0.4], y: [1, 0], ha: 'sigmoid', oa: 'sigmoid', lr: 0.5, step: 0, iter: 1, sel: { t: 'node', l: 1, i: 0 }, hist: [] };
+let P = randomParams(), C, G, Pnew, Cnew;
+function compute(){
+  C = forward(P, S.x, S.ha, S.oa);
+  G = backward(P, S.x, S.y, C, S.ha, S.oa);
+  Pnew = step_(P, G, S.lr);
+  Cnew = forward(Pnew, S.x, S.ha, S.oa);
+}
+
+/* ---------------- formattazione ---------------- */
+const fix = v => (Math.abs(v) < 5e-4 ? 0 : v).toFixed(3);
+const t = v => fix(v);                         // TeX
+const p = v => v < -5e-4 ? `(${fix(v)})` : fix(v); // TeX tra parentesi se negativo
+const h = v => fix(v).replace('-', '−');       // HTML
+
+/* ---------------- passi ---------------- */
+const STEPS = [
+  { k: 'i', name: 'Input' },
+  { k: 'f', name: 'Strato nascosto' },
+  { k: 'f', name: 'Output' },
+  { k: 'f', name: 'Loss' },
+  { k: 'b', name: 'δ output' },
+  { k: 'b', name: '∇ W⁽²⁾' },
+  { k: 'b', name: 'δ nascosto' },
+  { k: 'b', name: '∇ W⁽¹⁾' },
+  { k: 'u', name: 'Aggiorna' }
+];
+const chips = $('chips');
+STEPS.forEach((s, n) => {
+  const b = document.createElement('button');
+  b.className = 'chip ' + s.k; b.type = 'button'; b.setAttribute('role', 'tab');
+  b.innerHTML = `<span class="n">${n}</span>${s.name}`;
+  b.addEventListener('click', () => goTo(n));
+  chips.appendChild(b);
+});
+
+/* ---------------- SVG rete ---------------- */
+const svg = $('net');
+function el(tag, attrs, parent){ const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+const R = 28;
+const POS = { in: [[80, 150], [80, 270]], hid: [[330, 90], [330, 210], [330, 330]], out: [[580, 150], [580, 270]], loss: [730, 210] };
+const gEdges = el('g', {}, svg), gPulse = el('g', {}, svg), gNodes = el('g', {}, svg);
+[['input', 80], ['nascosto', 330], ['output', 580], ['loss', 730]].forEach(([t_, x]) => { const tx = el('text', { x, y: 22, class: 'collab' }, svg); tx.textContent = t_; });
+
+function shorten(a, b, ra, rb){ const dx = b[0] - a[0], dy = b[1] - a[1], d = Math.hypot(dx, dy); return [a[0] + dx * ra / d, a[1] + dy * ra / d, b[0] - dx * rb / d, b[1] - dy * rb / d]; }
+const edges = [];
+function addEdge(e, a, b){
+  const [x1, y1, x2, y2] = shorten(a, b, R, R + 2);
+  const g = el('g', {}, gEdges);
+  e.line = el('line', { x1, y1, x2, y2, class: 'edge idle' }, g);
+  e.hit = el('line', { x1, y1, x2, y2, class: 'hit' }, g);
+  e.title = el('title', {}, e.hit);
+  e.p = [x1, y1, x2, y2];
+  if (e.l !== 3) e.hit.addEventListener('click', () => { S.sel = { t: 'edge', l: e.l, i: e.i, j: e.j }; render(); });
+  edges.push(e);
+}
+for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) addEdge({ l: 1, i, j }, POS.in[j], POS.hid[i]);
+for (let k = 0; k < 2; k++) for (let i = 0; i < 3; i++) addEdge({ l: 2, i: k, j: i }, POS.hid[i], POS.out[k]);
+for (let k = 0; k < 2; k++) addEdge({ l: 3, i: 0, j: k }, POS.out[k], POS.loss);
+
+const nodes = [];
+function addNode(l, i, c, label, isLoss){
+  const g = el('g', { class: 'node', tabindex: 0, role: 'button' }, gNodes);
+  const n = { l, i, g };
+  if (isLoss) { el('rect', { x: c[0] - R, y: c[1] - R, width: 2 * R, height: 2 * R, rx: 8 }, g); el('rect', { class: 'ring', x: c[0] - R - 5, y: c[1] - R - 5, width: 2 * R + 10, height: 2 * R + 10, rx: 11 }, g); }
+  else { el('circle', { cx: c[0], cy: c[1], r: R }, g); el('circle', { class: 'ring', cx: c[0], cy: c[1], r: R + 5 }, g); }
+  n.val = el('text', { x: c[0], y: c[1], class: 'val' }, g);
+  const lb = el('text', { x: c[0], y: c[1] - R - 9, class: 'lbl' }, g); lb.innerHTML = label;
+  n.s1 = el('text', { x: c[0], y: c[1] + R + 16, class: 'sub' }, g);
+  n.s2 = el('text', { x: c[0], y: c[1] + R + 31, class: 'sub' }, g);
+  const pick = () => { S.sel = { t: 'node', l, i }; render(); };
+  g.addEventListener('click', pick);
+  g.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); pick(); } });
+  nodes.push(n);
+}
+const sub = (b, s) => `${b}<tspan baseline-shift="sub" font-size="9">${s}</tspan>`;
+POS.in.forEach((c, j) => addNode(0, j, c, sub('x', j + 1)));
+POS.hid.forEach((c, i) => addNode(1, i, c, sub('h', i + 1)));
+POS.out.forEach((c, k) => addNode(2, k, c, sub('ŷ', k + 1)));
+addNode(3, 0, POS.loss, '𝓛', true);
+
+/* pulses */
+let pulseRaf = null;
+function pulses(layer, dir){
+  if (reduceMotion) return;
+  cancelAnimationFrame(pulseRaf); gPulse.innerHTML = '';
+  const es = edges.filter(e => e.l === layer);
+  const dots = es.map(e => ({ e, c: el('circle', { r: 4.5, class: dir > 0 ? 'pulse-f' : 'pulse-b' }, gPulse) }));
+  const t0 = performance.now(), dur = 650;
+  const tick = now => {
+    let u = Math.min(1, (now - t0) / dur); const s = dir > 0 ? u : 1 - u;
+    const ease = s * s * (3 - 2 * s);
+    dots.forEach(({ e, c }) => { c.setAttribute('cx', e.p[0] + (e.p[2] - e.p[0]) * ease); c.setAttribute('cy', e.p[1] + (e.p[3] - e.p[1]) * ease); c.setAttribute('opacity', u < .85 ? 1 : (1 - u) / .15); });
+    if (u < 1) pulseRaf = requestAnimationFrame(tick); else gPulse.innerHTML = '';
+  };
+  pulseRaf = requestAnimationFrame(tick);
+}
+
+/* ---------------- render ---------------- */
+function edgeMode(l, s){
+  if (l === 1) return s === 0 ? 'idle' : s === 1 ? 'fwd' : s === 7 ? 'bwd' : s === 8 ? 'upd' : 'done';
+  if (l === 2) return s < 2 ? 'idle' : s === 2 ? 'fwd' : (s === 5 || s === 6) ? 'bwd' : s === 7 ? 'bdone' : s === 8 ? 'upd' : 'done';
+  return s < 3 ? 'idle' : s === 3 ? 'fwd' : s === 4 ? 'bwd' : s === 8 ? 'idle' : s > 4 ? 'bdone' : 'done';
+}
+function render(){
+  const s = S.step, Ps = s === 8 ? Pnew : P;
+  const maxG1 = Math.max(1e-9, ...G.gW1.flat().map(Math.abs)), maxG2 = Math.max(1e-9, ...G.gW2.flat().map(Math.abs));
+  const maxE = Math.max(1e-9, ...C.a2.map((a, k) => Math.abs(a - S.y[k])));
+  edges.forEach(e => {
+    const mode = edgeMode(e.l, s);
+    let w = 0, g = 0, width, tip;
+    if (e.l === 1) { w = Ps.W1[e.i][e.j]; g = G.gW1[e.i][e.j]; tip = `w(1)${e.i + 1}${e.j + 1} = ${h(w)}   ∂L/∂w = ${h(g)}`; }
+    else if (e.l === 2) { w = Ps.W2[e.i][e.j]; g = G.gW2[e.i][e.j]; tip = `w(2)${e.i + 1}${e.j + 1} = ${h(w)}   ∂L/∂w = ${h(g)}`; }
+    else { g = C.a2[e.j] - S.y[e.j]; tip = `∂L/∂ŷ${e.j + 1} = ŷ − y = ${h(g)}`; }
+    if (mode === 'bwd' || mode === 'bdone') width = e.l === 1 ? 1 + 6 * Math.abs(g) / maxG1 : e.l === 2 ? 1 + 6 * Math.abs(g) / maxG2 : 1 + 5 * Math.abs(g) / maxE;
+    else width = e.l === 3 ? 2 : 0.8 + 3.2 * Math.min(Math.abs(w) / 1.5, 1);
+    const isSel = S.sel.t === 'edge' && S.sel.l === e.l && S.sel.i === e.i && S.sel.j === e.j;
+    e.line.setAttribute('class', 'edge ' + mode + (isSel ? ' selE' : ''));
+    e.line.setAttribute('stroke-width', width.toFixed(2));
+    e.line.setAttribute('stroke-dasharray', e.l !== 3 && w < 0 && mode !== 'bwd' && mode !== 'bdone' ? '6 5' : 'none');
+    e.title.textContent = tip;
+  });
+
+  nodes.forEach(n => {
+    let cls = 'node', val = '?', s1 = '', s2 = '', s1c = 'm', s2c = 'd', known = false;
+    if (n.l === 0) { known = true; val = h(S.x[n.i]); cls += ' done'; s1 = 'input'; }
+    if (n.l === 1) {
+      known = s >= 1; if (known) { val = h(C.a1[n.i]); s1 = 'z = ' + h(C.z1[n.i]); s1c = 'z'; cls += ' done'; }
+      if (s >= 6) s2 = 'δ = ' + h(G.d1[n.i]);
+      if (s === 1) cls += ' act-f'; if (s === 6) cls += ' act-b';
+    }
+    if (n.l === 2) {
+      known = s >= 2; if (known) { val = h(C.a2[n.i]); s1 = 'z = ' + h(C.z2[n.i]); s1c = 'z'; cls += ' done'; }
+      if (s >= 4) s2 = 'δ = ' + h(G.d2[n.i]);
+      if (s === 2) cls += ' act-f'; if (s === 4) cls += ' act-b';
+    }
+    if (n.l === 3) {
+      known = s >= 3; if (known) { val = h(s === 8 ? Cnew.L : C.L); cls += ' done'; }
+      s1 = `y = (${h(S.y[0])}, ${h(S.y[1])})`;
+      if (s === 8) { s2 = 'prima ' + h(C.L); s2c = 'm'; }
+      if (s === 3) cls += ' act-f'; if (s === 4) cls += ' act-b';
+    }
+    if (S.sel.t === 'node' && S.sel.l === n.l && S.sel.i === n.i) cls += ' sel';
+    n.g.setAttribute('class', cls);
+    n.val.textContent = val; n.val.setAttribute('class', 'val' + (known ? '' : ' unk'));
+    n.s1.textContent = s1; n.s1.setAttribute('class', 'sub ' + s1c);
+    n.s2.textContent = s2; n.s2.setAttribute('class', 'sub ' + s2c);
+  });
+
+  [...chips.children].forEach((c, n) => { c.classList.toggle('cur', n === s); c.classList.toggle('past', n < s); c.setAttribute('aria-selected', n === s); });
+  $('prev').disabled = s === 0 && S.iter === 1;
+  $('iter').textContent = 'iterazione ' + S.iter;
+  renderPanel(); renderInspector(); renderGC(); renderChart();
+}
+
+/* ---------------- pannello del passo ---------------- */
+let lastPanel = '', mjChain = Promise.resolve();
+function typeset(node){
+  if (!window.__mjReady || !window.MathJax || !MathJax.typesetPromise) return;
+  mjChain = mjChain.then(() => { MathJax.typesetClear([node]); return MathJax.typesetPromise([node]); }).catch(() => {});
+}
+window.__onMJ = () => { lastPanel = ''; renderPanel(); };
+function panelHTML(){
+  const s = S.step, x = S.x, y = S.y, g1 = ACT[S.ha].tex, g2 = ACT[S.oa].tex;
+  const W1 = P.W1, b1 = P.b1, W2 = P.W2, b2 = P.b2;
+  const T = (tag, cls, title, body) => `<p class="tag ${cls}">${tag}</p><h2>${title}</h2>${body}`;
+  const M = tex => `<div class="math">$$${tex}$$</div>`;
+  switch (s) {
+    case 0: return T('Passo 0 · setup', 'u', 'Input e target',
+      `<p>La rete riceve l'esempio $x$ e deve avvicinare la sua uscita al target $y$. I pesi sono inizializzati a caso: muovi i cursori sotto la rete per cambiarli.</p>` +
+      M(String.raw`x = \begin{pmatrix}${t(x[0])}\\ ${t(x[1])}\end{pmatrix},\qquad y = \begin{pmatrix}${t(y[0])}\\ ${t(y[1])}\end{pmatrix}`) +
+      `<p>Premi <b>Avanti</b> (o la freccia →) per iniziare il forward pass.</p>`);
+    case 1: return T('Passo 1 · forward', 'f', 'Strato nascosto',
+      `<p>Ogni neurone nascosto fa una somma pesata degli input più il bias, poi applica l'attivazione: $z^{(1)} = W^{(1)}x + b^{(1)}$, $\;a^{(1)} = ${g1}(z^{(1)})$.</p>` +
+      M(String.raw`\begin{aligned}` + [0, 1, 2].map(i => String.raw`z^{(1)}_{${i + 1}} &= ${p(W1[i][0])}\cdot${p(x[0])} + ${p(W1[i][1])}\cdot${p(x[1])} + ${p(b1[i])} = ${t(C.z1[i])} \\ a^{(1)}_{${i + 1}} &= ${g1}(${t(C.z1[i])}) = ${t(C.a1[i])}`).join(String.raw`\\[6pt]`) + String.raw`\end{aligned}`) +
+      `<p>I valori $z$ e $a$ vengono <b>memorizzati</b>: serviranno nel backward.</p>`);
+    case 2: return T('Passo 2 · forward', 'f', 'Strato di output',
+      `<p>Stessa operazione, con le attivazioni nascoste come input: $z^{(2)} = W^{(2)}a^{(1)} + b^{(2)}$, $\;\hat y = a^{(2)} = ${g2}(z^{(2)})$.</p>` +
+      M(String.raw`\begin{aligned}` + [0, 1].map(k => String.raw`z^{(2)}_{${k + 1}} &= ${p(W2[k][0])}\cdot${p(C.a1[0])} + ${p(W2[k][1])}\cdot${p(C.a1[1])} + ${p(W2[k][2])}\cdot${p(C.a1[2])} + ${p(b2[k])} = ${t(C.z2[k])} \\ \hat y_{${k + 1}} &= ${g2}(${t(C.z2[k])}) = ${t(C.a2[k])}`).join(String.raw`\\[6pt]`) + String.raw`\end{aligned}`));
+    case 3: return T('Passo 3 · forward', 'f', 'Loss',
+      `<p>Confrontiamo l'uscita con il target con l'errore quadratico. Questo è l'unico numero che vogliamo ridurre.</p>` +
+      M(String.raw`\mathcal L = \tfrac12\Big[(${t(C.a2[0])} - ${t(y[0])})^2 + (${t(C.a2[1])} - ${t(y[1])})^2\Big] = ${C.L.toFixed(4)}`) +
+      `<p>Da qui parte il backward: vogliamo sapere come cambia $\\mathcal L$ muovendo ciascuno dei 17 parametri.</p>`);
+    case 4: return T('Passo 4 · backward · <a href="#bp1">BP1</a>', 'b', 'Errore dello strato di output',
+      `<p>Derivata della loss rispetto a $\\hat y$, moltiplicata per la derivata dell'attivazione nel punto $z^{(2)}$ salvato: $\\delta^{(2)}_k = (\\hat y_k - y_k)\\,${g2}'(z^{(2)}_k)$.</p>` +
+      M(String.raw`\begin{aligned}` + [0, 1].map(k => String.raw`\delta^{(2)}_{${k + 1}} &= (${t(C.a2[k])} - ${t(y[k])})\cdot ${t(G.dz2[k])} = ${t(G.d2[k])}`).join(String.raw`\\`) + String.raw`\end{aligned}`) +
+      (S.oa === 'sigmoid' ? `<p>Qui $\\sigma'(z) = \\hat y(1-\\hat y)$. Se l'output è saturo (vicino a 0 o 1) questo fattore è piccolo e il gradiente si attenua.</p>` : `<p>Con output lineare $\\mathrm{id}'(z) = 1$, quindi $\\delta^{(2)} = \\hat y - y$.</p>`));
+    case 5: return T('Passo 5 · backward · <a href="#bp4">BP4</a>, <a href="#bp3">BP3</a>', 'b', 'Gradienti di W⁽²⁾ e b⁽²⁾',
+      `<p>Il gradiente di ogni peso è l'errore del neurone di arrivo per l'attivazione del neurone di partenza. In forma matriciale è un prodotto esterno.</p>` +
+      M(String.raw`\frac{\partial\mathcal L}{\partial W^{(2)}} = \delta^{(2)}\big(a^{(1)}\big)^{\!\top} = \begin{pmatrix}${t(G.d2[0])}\\ ${t(G.d2[1])}\end{pmatrix}\begin{pmatrix}${t(C.a1[0])} & ${t(C.a1[1])} & ${t(C.a1[2])}\end{pmatrix}`) +
+      M(String.raw`= \begin{pmatrix}${G.gW2[0].map(t).join(' & ')}\\ ${G.gW2[1].map(t).join(' & ')}\end{pmatrix},\qquad \frac{\partial\mathcal L}{\partial b^{(2)}} = \delta^{(2)} = \begin{pmatrix}${t(G.d2[0])}\\ ${t(G.d2[1])}\end{pmatrix}`) +
+      `<p>Lo spessore degli archi arancioni è proporzionale a $|\\partial\\mathcal L/\\partial w|$.</p>`);
+    case 6: return T('Passo 6 · backward · <a href="#bp2">BP2</a>', 'b', 'Errore dello strato nascosto',
+      `<p>L'errore torna indietro lungo gli stessi archi, pesato dagli stessi pesi (cioè con $W^{(2)\\top}$), poi viene moltiplicato per $${g1}'(z^{(1)})$.</p>` +
+      M(String.raw`\begin{aligned}` + [0, 1, 2].map(i => String.raw`\delta^{(1)}_{${i + 1}} &= \big(${p(W2[0][i])}\cdot${p(G.d2[0])} + ${p(W2[1][i])}\cdot${p(G.d2[1])}\big)\cdot ${t(G.dz1[i])} = ${t(G.back[i])}\cdot${t(G.dz1[i])} = ${t(G.d1[i])}`).join(String.raw`\\`) + String.raw`\end{aligned}`) +
+      `<p>Si usano i pesi <b>vecchi</b> $W^{(2)}$: l'aggiornamento avviene solo dopo aver calcolato tutti i gradienti.</p>`);
+    case 7: return T('Passo 7 · backward · <a href="#bp4">BP4</a>, <a href="#bp3">BP3</a>', 'b', 'Gradienti di W⁽¹⁾ e b⁽¹⁾',
+      `<p>Come al passo 5, ma con $\\delta^{(1)}$ e l'input $x$ come attivazione di partenza.</p>` +
+      M(String.raw`\frac{\partial\mathcal L}{\partial W^{(1)}} = \delta^{(1)}x^{\top} = \begin{pmatrix}${t(G.d1[0])}\\ ${t(G.d1[1])}\\ ${t(G.d1[2])}\end{pmatrix}\begin{pmatrix}${t(x[0])} & ${t(x[1])}\end{pmatrix} = \begin{pmatrix}${G.gW1.map(rw => rw.map(t).join(' & ')).join(String.raw`\\ `)}\end{pmatrix}`) +
+      M(String.raw`\frac{\partial\mathcal L}{\partial b^{(1)}} = \delta^{(1)} = \begin{pmatrix}${t(G.d1[0])}\\ ${t(G.d1[1])}\\ ${t(G.d1[2])}\end{pmatrix}`) +
+      `<p>Ora abbiamo tutti i 17 gradienti, calcolati con un solo passaggio all'indietro.</p>`);
+    case 8: {
+      const dL = Cnew.L - C.L;
+      return T('Passo 8 · aggiornamento', 'u', 'Discesa del gradiente',
+      `<p>Ogni parametro si sposta nella direzione opposta al suo gradiente, di un passo $\\eta = ${S.lr.toFixed(2)}$: $\\;\\theta \\leftarrow \\theta - \\eta\\,\\nabla_\\theta\\mathcal L$. Due esempi:</p>` +
+      M(String.raw`\begin{aligned} w^{(2)}_{11} &\leftarrow ${t(P.W2[0][0])} - ${S.lr.toFixed(2)}\cdot${p(G.gW2[0][0])} = ${t(Pnew.W2[0][0])}\\ w^{(1)}_{11} &\leftarrow ${t(P.W1[0][0])} - ${S.lr.toFixed(2)}\cdot${p(G.gW1[0][0])} = ${t(Pnew.W1[0][0])}\end{aligned}`) +
+      M(String.raw`\mathcal L:\ ${C.L.toFixed(4)}\ \longrightarrow\ ${Cnew.L.toFixed(4)}`) +
+      `<p>${dL < 0 ? 'La loss è scesa.' : 'La loss è salita: il learning rate è troppo grande per questo punto. Prova a ridurre η.'} Premi <b>Avanti</b> per ripartire dal forward con i pesi nuovi.</p>`);
+    }
+  }
+}
+function renderPanel(){
+  const html = panelHTML();
+  if (html === lastPanel) return;
+  lastPanel = html;
+  const el_ = $('panel'); el_.innerHTML = html; typeset(el_);
+}
+
+/* ---------------- ispettore ---------------- */
+function kv(rows){ return '<dl class="kv">' + rows.map(([k, v, c]) => `<dt>${k}</dt><dd class="${c || ''}">${v}</dd>`).join('') + '</dl>'; }
+const pend = n => `<span class="pend">al passo ${n}</span>`;
+function renderInspector(){
+  const s = S.step, sel = S.sel, a1n = S.ha, out = [];
+  let who = '', rows = [];
+  if (sel.t === 'node') {
+    if (sel.l === 0) { who = `Input x<sub>${sel.i + 1}</sub>`; rows = [['valore', h(S.x[sel.i]), 'f'], ['ruolo', 'fa da a<sup>(0)</sup> nel calcolo dei gradienti di W<sup>(1)</sup>']]; }
+    if (sel.l === 1) {
+      const i = sel.i; who = `Neurone nascosto h<sub>${i + 1}</sub>`;
+      rows = [
+        ['z<sup>(1)</sup>', s >= 1 ? h(C.z1[i]) : pend(1), 'f'],
+        ['a<sup>(1)</sup>', s >= 1 ? h(C.a1[i]) : pend(1), 'f'],
+        ["σ′(z)", s >= 6 ? h(G.dz1[i]) : pend(6), 'b'],
+        ['Σ<sub>k</sub> w<sub>k' + (i + 1) + '</sub>δ<sub>k</sub>', s >= 6 ? h(G.back[i]) : pend(6), 'b'],
+        ['δ<sup>(1)</sup> = ∂𝓛/∂z', s >= 6 ? h(G.d1[i]) : pend(6), 'b'],
+        ['b<sup>(1)</sup>', h(P.b1[i]) + (s === 8 ? ' → ' + h(Pnew.b1[i]) : '')],
+        ['∂𝓛/∂b', s >= 7 ? h(G.gb1[i]) : pend(7), 'b']
+      ];
+    }
+    if (sel.l === 2) {
+      const k = sel.i; who = `Neurone di output ŷ<sub>${k + 1}</sub>`;
+      rows = [
+        ['z<sup>(2)</sup>', s >= 2 ? h(C.z2[k]) : pend(2), 'f'],
+        ['ŷ = a<sup>(2)</sup>', s >= 2 ? h(C.a2[k]) : pend(2), 'f'],
+        ['target y', h(S.y[k])],
+        ['ŷ − y', s >= 4 ? h(C.a2[k] - S.y[k]) : pend(4), 'b'],
+        ["σ′(z)", s >= 4 ? h(G.dz2[k]) : pend(4), 'b'],
+        ['δ<sup>(2)</sup> = ∂𝓛/∂z', s >= 4 ? h(G.d2[k]) : pend(4), 'b'],
+        ['b<sup>(2)</sup>', h(P.b2[k]) + (s === 8 ? ' → ' + h(Pnew.b2[k]) : '')],
+        ['∂𝓛/∂b', s >= 5 ? h(G.gb2[k]) : pend(5), 'b']
+      ];
+    }
+    if (sel.l === 3) { who = 'Loss 𝓛'; rows = [['𝓛', s >= 3 ? C.L.toFixed(4) : pend(3), 'f'], ['dopo l\'aggiornamento', s === 8 ? Cnew.L.toFixed(4) : pend(8)], ['∂𝓛/∂𝓛', '1 (punto di partenza del backward)', 'b']]; }
+  } else {
+    const { l, i, j } = sel;
+    if (l === 1) {
+      who = `Peso w<sup>(1)</sup><sub>${i + 1}${j + 1}</sub> &nbsp;<span style="font-size:14px;color:var(--muted)">x<sub>${j + 1}</sub> → h<sub>${i + 1}</sub></span>`;
+      rows = [['w', h(P.W1[i][j]), 'f'], ['a di partenza = x<sub>' + (j + 1) + '</sub>', h(S.x[j]), 'f'], ['δ di arrivo = δ<sup>(1)</sup><sub>' + (i + 1) + '</sub>', s >= 6 ? h(G.d1[i]) : pend(6), 'b'],
+        ['∂𝓛/∂w = δ · a', s >= 7 ? `${h(G.d1[i])} × ${h(S.x[j])} = ${h(G.gW1[i][j])}` : pend(7), 'b'], ['w nuovo = w − η·∂𝓛/∂w', s === 8 ? h(Pnew.W1[i][j]) : pend(8)]];
+    } else {
+      who = `Peso w<sup>(2)</sup><sub>${i + 1}${j + 1}</sub> &nbsp;<span style="font-size:14px;color:var(--muted)">h<sub>${j + 1}</sub> → ŷ<sub>${i + 1}</sub></span>`;
+      rows = [['w', h(P.W2[i][j]), 'f'], ['a di partenza = a<sup>(1)</sup><sub>' + (j + 1) + '</sub>', s >= 1 ? h(C.a1[j]) : pend(1), 'f'], ['δ di arrivo = δ<sup>(2)</sup><sub>' + (i + 1) + '</sub>', s >= 4 ? h(G.d2[i]) : pend(4), 'b'],
+        ['∂𝓛/∂w = δ · a', s >= 5 ? `${h(G.d2[i])} × ${h(C.a1[j])} = ${h(G.gW2[i][j])}` : pend(5), 'b'], ['w nuovo = w − η·∂𝓛/∂w', s === 8 ? h(Pnew.W2[i][j]) : pend(8)]];
+    }
+  }
+  $('insp').innerHTML = `<h3>Ispeziona</h3><p class="who">${who}</p>${kv(rows)}<p class="hint">Clicca un neurone o un arco della rete per ispezionarlo.</p>`;
+}
+
+/* ---------------- verifica gradienti ---------------- */
+function renderGC(){
+  const th = flat(P), gb = flatG(G), eps = 1e-5;
+  const rows = th.map((_, k) => {
+    const a = th.slice(), b = th.slice(); a[k] += eps; b[k] -= eps;
+    const gn = (forward(unflat(a), S.x, S.ha, S.oa).L - forward(unflat(b), S.x, S.ha, S.oa).L) / (2 * eps);
+    const re = Math.abs(gb[k] - gn) / Math.max(Math.abs(gb[k]) + Math.abs(gn), 1e-12);
+    const exact = Math.abs(gb[k]) + Math.abs(gn) < 1e-12;
+    return `<tr><td>${PNAMES[k]}</td><td class="num">${gb[k].toExponential(5).replace('-', '−')}</td><td class="num">${gn.toExponential(5).replace('-', '−')}</td><td class="num ${exact || re < 1e-7 ? 'ok' : 'warn'}">${exact ? '0 (entrambi nulli)' : re.toExponential(1)}</td></tr>`;
+  });
+  $('gc').tBodies[0].innerHTML = rows.join('');
+}
+
+/* ---------------- grafico loss ---------------- */
+function renderChart(){
+  const svgc = $('chart'), H = S.hist.concat([C.L]);
+  const W = 320, Ht = 130, l = 40, rr = 10, tp = 10, bt = 22;
+  const max = Math.max(...H, 1e-6), n = Math.max(H.length - 1, 1);
+  const X = i => l + (W - l - rr) * i / n, Y = v => tp + (Ht - tp - bt) * (1 - v / max);
+  const pts = H.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(' ');
+  svgc.innerHTML =
+    `<line class="axis" x1="${l}" y1="${Y(0)}" x2="${W - rr}" y2="${Y(0)}"/><line class="axis" x1="${l}" y1="${tp}" x2="${W - rr}" y2="${tp}" stroke-dasharray="2 3"/>` +
+    `<text x="${l - 6}" y="${tp + 4}" text-anchor="end">${max.toFixed(3)}</text><text x="${l - 6}" y="${Y(0) + 4}" text-anchor="end">0</text>` +
+    `<text x="${l}" y="${Ht - 4}">1</text><text x="${W - rr}" y="${Ht - 4}" text-anchor="end">${H.length}</text>` +
+    (H.length > 1 ? `<polygon class="area" points="${X(0)},${Y(0)} ${pts} ${X(H.length - 1)},${Y(0)}"/><polyline class="line" points="${pts}"/>` : '') +
+    `<circle class="dot" cx="${X(H.length - 1)}" cy="${Y(H[H.length - 1])}" r="3.5"/>` +
+    `<text x="${W - rr}" y="${Math.max(Y(H[H.length - 1]) - 8, tp + 10)}" text-anchor="end">𝓛 = ${H[H.length - 1].toFixed(4)}</text>`;
+}
+
+/* ---------------- navigazione ---------------- */
+function goTo(n, animate = true){
+  const prev = S.step; S.step = n; render();
+  if (!animate || n === prev) return;
+  if (n === prev + 1 || (prev === 8 && n === 1)) {
+    if (n === 1) pulses(1, 1); else if (n === 2) pulses(2, 1); else if (n === 3) pulses(3, 1);
+    else if (n === 4) pulses(3, -1); else if (n === 6) pulses(2, -1); else if (n === 7) pulses(1, -1);
+  }
+}
+function next(){
+  if (S.step === 8) { S.hist.push(C.L); P = Pnew; S.iter++; compute(); goTo(1); }
+  else goTo(S.step + 1);
+}
+function prev(){ if (S.step > 0) goTo(S.step - 1, false); }
+$('next').addEventListener('click', next);
+$('prev').addEventListener('click', prev);
+let playT = null;
+function stopPlay(){ clearInterval(playT); playT = null; $('play').textContent = '▶ Riproduci'; }
+$('play').addEventListener('click', () => { if (playT) return stopPlay(); $('play').textContent = '❚❚ Pausa'; next(); playT = setInterval(next, 1700); });
+document.addEventListener('keydown', ev => {
+  if (ev.target.closest && ev.target.closest('input,select,textarea')) return;
+  if (ev.key === 'ArrowRight') { ev.preventDefault(); next(); } else if (ev.key === 'ArrowLeft') { ev.preventDefault(); prev(); }
+});
+
+/* ---------------- controlli ---------------- */
+function bindRange(id, fn){ const inp = $(id), o = $(id + 'o'); const upd = () => { o.textContent = h(+inp.value); fn(+inp.value); }; inp.addEventListener('input', () => { upd(); compute(); render(); }); o.textContent = h(+inp.value); }
+bindRange('x1', v => S.x[0] = v); bindRange('x2', v => S.x[1] = v);
+bindRange('y1', v => S.y[0] = v); bindRange('y2', v => S.y[1] = v);
+bindRange('lr', v => S.lr = v);
+$('lro').textContent = S.lr.toFixed(2);
+$('hact').addEventListener('change', e => { S.ha = e.target.value; compute(); render(); });
+$('oact').addEventListener('change', e => {
+  S.oa = e.target.value;
+  ['y1', 'y2'].forEach(id => { const inp = $(id); if (S.oa === 'linear') { inp.min = -2; inp.max = 2; } else { inp.min = 0; inp.max = 1; inp.value = Math.min(1, Math.max(0, +inp.value)); } S.y[id === 'y1' ? 0 : 1] = +inp.value; $(id + 'o').textContent = h(+inp.value); });
+  compute(); render();
+});
+$('rand').addEventListener('click', () => { stopPlay(); rng = mulberry32((Math.random() * 1e9) | 0); P = randomParams(); S.hist = []; S.iter = 1; compute(); goTo(0, false); });
+let training = false;
+$('train').addEventListener('click', () => {
+  if (training) return; stopPlay(); training = true; $('train').disabled = true;
+  let left = 200;
+  const tick = () => {
+    for (let q = 0; q < 8 && left > 0; q++, left--) { compute(); S.hist.push(C.L); P = Pnew; S.iter++; }
+    compute(); S.step = 3; render();
+    if (left > 0) requestAnimationFrame(tick); else { training = false; $('train').disabled = false; }
+  };
+  if (S.step === 8) { /* il passo 8 mostra un aggiornamento non ancora applicato: lo applichiamo */ S.hist.push(C.L); P = Pnew; S.iter++; }
+  requestAnimationFrame(tick);
+});
+
+/* ---------------- demo regola della catena ---------------- */
+const chain = $('chain');
+const CP = { x: [60, 60], w: [60, 170], mul: [230, 115], b: [230, 215], add: [390, 160], sig: [545, 160], loss: [705, 160], y: [705, 245] };
+const chainEdges = [['x', 'mul'], ['w', 'mul'], ['mul', 'add'], ['b', 'add'], ['add', 'sig'], ['sig', 'loss'], ['y', 'loss']];
+const BW = 64, BH = 36;
+chainEdges.forEach(([a, b]) => {
+  const A = CP[a], B = CP[b], dx = B[0] - A[0], dy = B[1] - A[1];
+  const fa = Math.min(BW / 2 / Math.abs(dx || 1e-9), BH / 2 / Math.abs(dy || 1e-9)), fb = fa;
+  el('line', { class: 'dl', x1: A[0] + dx * fa, y1: A[1] + dy * fa, x2: B[0] - dx * fb, y2: B[1] - dy * fb, 'marker-end': 'url(#arr)' }, chain);
+});
+const defs = el('defs', {}, chain); const mk = el('marker', { id: 'arr', viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, defs);
+el('path', { d: 'M0,0 L10,5 L0,10 z', style: 'fill:var(--edge)' }, mk);
+const CN = {};
+[['x', 'x', 0], ['w', 'w', 0], ['b', 'b', 0], ['y', 'y', 0], ['mul', '×', 1], ['add', '+', 1], ['sig', 'σ', 1], ['loss', '½(·−y)²', 1]].forEach(([k, label, op]) => {
+  const g = el('g', { class: 'dn' + (op ? ' op' : '') }, chain), c = CP[k];
+  const wdt = k === 'loss' ? 96 : BW;
+  el('rect', { x: c[0] - wdt / 2, y: c[1] - BH / 2, width: wdt, height: BH, rx: op ? 18 : 6 }, g);
+  const tx = el('text', { class: 'op', x: c[0], y: c[1] }, g); tx.textContent = label;
+  const nm = { mul: 'u', add: 'z', sig: 'a', loss: '𝓛' }[k];
+  CN[k] = { fv: el('text', { class: 'fv', x: c[0], y: c[1] - BH / 2 - 7 }, g), gv: el('text', { class: 'gv', x: c[0], y: c[1] + BH / 2 + 16 }, g), nm };
+});
+function renderChain(){
+  const x = +$('cx').value, w = +$('cw').value, b = +$('cb').value, y = +$('cy').value;
+  const u = w * x, z = u + b, a = sig(z), L = 0.5 * (a - y) ** 2;
+  const dLa = a - y, sp = a * (1 - a), dLz = dLa * sp, dLu = dLz, dLb = dLz, dLw = dLu * x, dLx = dLu * w;
+  const set = (k, f, g) => { CN[k].fv.textContent = (CN[k].nm ? CN[k].nm + ' = ' : '') + f; CN[k].gv.textContent = g; };
+  set('x', h(x), '∂𝓛/∂x = ' + h(dLx)); set('w', h(w), '∂𝓛/∂w = ' + h(dLw)); set('b', h(b), '∂𝓛/∂b = ' + h(dLb)); set('y', h(y), '');
+  set('mul', h(u), '∂𝓛/∂u = ' + h(dLu)); set('add', h(z), '∂𝓛/∂z = ' + h(dLz)); set('sig', h(a), '∂𝓛/∂a = ' + h(dLa)); set('loss', L.toFixed(4), '∂𝓛/∂𝓛 = 1');
+  $('chainlist').innerHTML = [
+    `<li><span class="g">∂𝓛/∂a</span> = a − y <span class="l">=</span> ${h(a)} − ${h(y)} = <span class="g">${h(dLa)}</span></li>`,
+    `<li><span class="g">∂𝓛/∂z</span> = ∂𝓛/∂a · σ′(z) = ${h(dLa)} · ${h(sp)} = <span class="g">${h(dLz)}</span> <span class="l">  σ′(z) = a(1−a)</span></li>`,
+    `<li><span class="g">∂𝓛/∂b</span> = ∂𝓛/∂z · 1 = <span class="g">${h(dLb)}</span>,   <span class="g">∂𝓛/∂u</span> = ∂𝓛/∂z · 1 = <span class="g">${h(dLu)}</span> <span class="l">  il nodo + copia il gradiente</span></li>`,
+    `<li><span class="g">∂𝓛/∂w</span> = ∂𝓛/∂u · x = ${h(dLu)} · ${h(x)} = <span class="g">${h(dLw)}</span>,   <span class="g">∂𝓛/∂x</span> = ∂𝓛/∂u · w = <span class="g">${h(dLx)}</span> <span class="l">  il nodo × scambia gli ingressi</span></li>`
+  ].join('');
+}
+['cx', 'cw', 'cb', 'cy'].forEach(id => { const inp = $(id); const o = $(id + 'o'); const u = () => { o.textContent = h(+inp.value); renderChain(); }; inp.addEventListener('input', u); o.textContent = h(+inp.value); });
+renderChain();
+
+/* ---------------- avvio ---------------- */
+compute(); render();
+})();
+</script>
+</body>
+</html>
