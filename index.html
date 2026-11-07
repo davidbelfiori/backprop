@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="Laboratorio interattivo sulla backpropagation: forward e backward pass passo per passo su una rete 2-3-2, con teoria e dimostrazioni.">
+<meta name="description" content="Laboratorio interattivo sulla backpropagation: forward e backward pass passo per passo, nella notazione del corso, con teoria e dimostrazioni.">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
 <title>Backprop passo per passo</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -11,7 +11,10 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400&display=swap">
 <script>
   window.MathJax = {
-    tex: { inlineMath: [['$', '$']], displayMath: [['$$', '$$']] },
+    tex: {
+      inlineMath: [['$', '$']], displayMath: [['$$', '$$']],
+      macros: { vx: '\\mathbf{x}', vh: '\\mathbf{h}', va: '\\mathbf{a}', vb: '\\mathbf{b}', vW: '\\mathbf{W}', vg: '\\mathbf{g}', vy: '\\mathbf{y}', vt: '\\mathbf{t}', vu: '\\mathbf{u}', vth: '\\boldsymbol{\\theta}' }
+    },
     svg: { fontCache: 'global' },
     startup: {
       pageReady: () => MathJax.startup.defaultPageReady().then(() => { window.__mjReady = true; if (window.__onMJ) window.__onMJ(); })
@@ -45,11 +48,11 @@
 }
 *{box-sizing:border-box}
 body{background:var(--paper); color:var(--ink); font-family:var(--f-ui); font-size:15px; line-height:1.5}
-.wrap{max-width:1200px; margin:0 auto; padding-left:max(16px, env(safe-area-inset-left, 0px)); padding-right:max(16px, env(safe-area-inset-right, 0px))}
+.wrap{max-width:1240px; margin:0 auto; padding-left:max(16px, env(safe-area-inset-left, 0px)); padding-right:max(16px, env(safe-area-inset-right, 0px))}
 header.top{padding-block:40px 20px}
 .eyebrow{font-family:var(--f-ui); font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); margin:0 0 8px}
 h1{font-family:var(--f-display); font-weight:700; font-size:clamp(30px, 5vw, 46px); line-height:1.08; margin:0 0 12px; text-wrap:balance; letter-spacing:-.01em}
-.lead{font-family:var(--f-body); font-size:18px; max-width:68ch; color:var(--muted); margin:0}
+.lead{font-family:var(--f-body); font-size:18px; max-width:70ch; color:var(--muted); margin:0}
 .lead b{color:var(--ink); font-weight:600}
 .k-fwd{color:var(--fwd); font-weight:600}
 .k-bwd{color:var(--bwd); font-weight:600}
@@ -88,7 +91,7 @@ button.btn:disabled{opacity:.45; cursor:default}
 .node.sel .ring{stroke:var(--ink); stroke-dasharray:3 3; fill:none; stroke-width:1.2}
 .node{cursor:pointer; outline:none}
 .node .ring{fill:none; stroke:none}
-.val{font:500 14px var(--f-mono); fill:var(--ink); text-anchor:middle; dominant-baseline:central}
+.val{font:500 12.5px var(--f-mono); fill:var(--ink); text-anchor:middle; dominant-baseline:central}
 .val.unk{fill:var(--muted)}
 .lbl{font:600 13px var(--f-body); fill:var(--ink); text-anchor:middle}
 .sub{font:11.5px var(--f-mono); text-anchor:middle}
@@ -135,7 +138,7 @@ mjx-container[display="true"]{overflow-x:auto; overflow-y:hidden; max-width:100%
 .field{display:flex; flex-direction:column; gap:6px; min-width:0}
 .field label, .grp-t{font:500 12px var(--f-ui); color:var(--muted); letter-spacing:.04em}
 .row{display:flex; align-items:center; gap:8px}
-.row output{font:13px var(--f-mono); min-width:46px; text-align:right; font-variant-numeric:tabular-nums}
+.row output{font:13px var(--f-mono); min-width:52px; text-align:right; font-variant-numeric:tabular-nums}
 input[type=range]{flex:1; min-width:0; accent-color:var(--fwd)}
 select{font:14px var(--f-ui); padding:6px 8px; border-radius:6px; border:1px solid var(--rule); background:var(--surface); color:var(--ink)}
 .grp{display:flex; flex-direction:column; gap:10px; min-width:0}
@@ -143,13 +146,16 @@ select{font:14px var(--f-ui); padding:6px 8px; border-radius:6px; border:1px sol
 .chart .axis{stroke:var(--rule)} .chart .line{fill:none; stroke:var(--bwd); stroke-width:2}
 .chart .area{fill:var(--bwd-soft)} .chart text{font:11px var(--f-mono); fill:var(--muted)}
 .chart .dot{fill:var(--bwd)}
+.preset{display:flex; flex-wrap:wrap; gap:10px 16px; align-items:center; padding:12px 16px; margin-block:8px 0; font-size:14px}
+.preset p{margin:0; flex:1 1 320px; color:var(--muted); font-family:var(--f-body); font-size:15px}
+.preset p b{color:var(--ink)}
 
 /* ---------- THEORY ---------- */
 .theory{display:grid; grid-template-columns:200px minmax(0,1fr); gap:40px; padding-block:48px 80px; border-top:1px solid var(--rule); margin-top:32px}
 @media (max-width: 920px){ .theory{grid-template-columns:minmax(0,1fr); gap:16px} .toc{position:static !important} }
 .toc{position:sticky; top:calc(env(safe-area-inset-top, 0px) + 16px); align-self:start; font-size:13.5px}
 .toc p{font:600 12px var(--f-ui); letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin:0 0 10px}
-.toc ol{margin:0; padding-left:20px; display:flex; flex-direction:column; gap:6px}
+.toc ol{margin:0; padding-left:22px; display:flex; flex-direction:column; gap:6px}
 .toc a{color:var(--ink); text-decoration:none} .toc a:hover{color:var(--fwd)}
 article{font-family:var(--f-body); font-size:17.5px; line-height:1.65; max-width:72ch; min-width:0}
 article h2{font-family:var(--f-display); font-size:28px; line-height:1.2; margin:56px 0 12px; text-wrap:balance}
@@ -160,12 +166,14 @@ article p{margin:12px 0}
 article .eq{overflow-x:auto; overflow-y:hidden}
 .box{border:1px solid var(--rule); background:var(--surface); border-radius:10px; padding:14px 18px; margin:20px 0}
 .box.bp{border-left:4px solid var(--bwd)}
+.box.fw{border-left:4px solid var(--fwd)}
 .box .bt{font:600 12px var(--f-ui); letter-spacing:.1em; text-transform:uppercase; color:var(--bwd); margin:0 0 4px}
+.box.fw .bt{color:var(--fwd)}
 .proof{font-size:16.5px; color:var(--ink)}
 .proof .pt{font-style:italic}
 .qed{float:right; color:var(--muted)}
-pre.code{font:14px/1.6 var(--f-mono); background:var(--surface); border:1px solid var(--rule); border-radius:10px; padding:16px 18px; overflow-x:auto; margin:20px 0}
-pre.code .c{color:var(--muted)} pre.code .f{color:var(--fwd)} pre.code .b{color:var(--bwd)}
+pre.code{font:14px/1.7 var(--f-mono); background:var(--surface); border:1px solid var(--rule); border-radius:10px; padding:16px 18px; overflow-x:auto; margin:20px 0}
+pre.code .c{color:var(--muted)} pre.code .f{color:var(--fwd)} pre.code .b{color:var(--bwd)} pre.code .ln{color:var(--muted); user-select:none}
 .tablewrap{overflow-x:auto; margin:16px 0}
 table{border-collapse:collapse; width:100%; font-size:14px; font-family:var(--f-ui)}
 th, td{padding:7px 10px; border-bottom:1px solid var(--rule); text-align:right; white-space:nowrap}
@@ -174,6 +182,7 @@ td:first-child, th:first-child{text-align:left}
 td.num{font-family:var(--f-mono); font-variant-numeric:tabular-nums}
 td.ok{color:var(--ok)} td.warn{color:var(--warn)}
 .note{font-size:15px; color:var(--muted)}
+.map td, .map th{text-align:left; white-space:normal}
 
 /* chain demo */
 .demo{background:var(--surface); border:1px solid var(--rule); border-radius:10px; padding:14px; margin:20px 0; font-family:var(--f-ui); font-size:14px}
@@ -197,20 +206,20 @@ footer{padding-block:24px 40px; color:var(--muted); font-size:13px; border-top:1
 
 <div class="wrap">
   <header class="top">
-    <p class="eyebrow">Machine Learning · Reti neurali</p>
+    <p class="eyebrow">Machine Learning · Neural Networks: Training</p>
     <h1>Backpropagation, passo per passo</h1>
-    <p class="lead">Una rete 2–3–2 vera, con numeri veri. Avanza un passo alla volta: il segnale scorre <span class="k-fwd">in avanti</span> per calcolare la loss, poi il gradiente torna <span class="k-bwd">all'indietro</span> con la regola della catena. Clicca su un neurone o su un peso per vedere ogni quantità. Sotto trovi la teoria completa, con le dimostrazioni.</p>
+    <p class="lead">Una rete vera, con numeri veri, nella notazione del corso: pre-attivazioni <b>a</b>, attivazioni <b>h</b>, output <b>y</b>, target <b>t</b> e il vettore <b>g</b> che porta il gradiente. Avanza un passo alla volta: il segnale scorre <span class="k-fwd">in avanti</span> per calcolare la loss, poi il gradiente torna <span class="k-bwd">all'indietro</span> con la regola della catena. Clicca su un neurone o su un peso per vedere ogni quantità.</p>
   </header>
 
   <section class="lab" aria-label="Laboratorio interattivo">
     <div class="card netcard">
       <div class="steps" id="chips" role="tablist" aria-label="Passi dell'algoritmo"></div>
-      <div class="svgbox"><svg id="net" viewBox="0 0 800 420" role="img" aria-label="Rete neurale con 2 input, 3 neuroni nascosti, 2 output e la loss"></svg></div>
+      <div class="svgbox"><svg id="net" viewBox="0 0 800 420" role="img" aria-label="Rete neurale con 2 input, uno strato nascosto, 2 output e la loss"></svg></div>
       <div class="legend">
         <span><i class="sw"></i>forward (peso positivo)</span>
         <span><i class="sw d"></i>peso negativo</span>
         <span><i class="sw b"></i>backward (spessore ∝ |gradiente|)</span>
-        <span>dentro il nodo: attivazione <i>a</i></span>
+        <span>nel nodo: <i>h</i> · sotto: <i>a</i> e <i>g</i> = ∂𝓛/∂<i>a</i></span>
       </div>
       <div class="ctrl">
         <button class="btn" id="prev" aria-label="Passo precedente">← Indietro</button>
@@ -226,6 +235,11 @@ footer{padding-block:24px 40px; color:var(--muted); font-size:13px; border-top:1
     </div>
   </section>
 
+  <section class="card preset" aria-label="Esercizio del corso">
+    <p><b>Esercizio del corso.</b> Carica la rete 2–2–2 dell'esercizio delle slide: $\vx = [0.5,\ 0.1]^T$, $\vt = [0.01,\ 0.99]^T$, sigmoide ovunque, $\alpha = 0.3$. Poi avanza passo per passo e confronta i numeri con la soluzione.</p>
+    <button class="btn primary" id="preset">Carica l'esercizio</button>
+  </section>
+
   <section class="card params" aria-label="Parametri">
     <div class="grp">
       <span class="grp-t">Input x</span>
@@ -233,18 +247,20 @@ footer{padding-block:24px 40px; color:var(--muted); font-size:13px; border-top:1
       <div class="field"><label for="x2">x₂</label><div class="row"><input type="range" id="x2" min="-2" max="2" step="0.05" value="-0.4"><output id="x2o"></output></div></div>
     </div>
     <div class="grp">
-      <span class="grp-t">Target y</span>
-      <div class="field"><label for="y1">y₁</label><div class="row"><input type="range" id="y1" min="0" max="1" step="0.05" value="1"><output id="y1o"></output></div></div>
-      <div class="field"><label for="y2">y₂</label><div class="row"><input type="range" id="y2" min="0" max="1" step="0.05" value="0"><output id="y2o"></output></div></div>
+      <span class="grp-t">Target t</span>
+      <div class="field"><label for="t1">t₁</label><div class="row"><input type="range" id="t1" min="0" max="1" step="0.01" value="1"><output id="t1o"></output></div></div>
+      <div class="field"><label for="t2">t₂</label><div class="row"><input type="range" id="t2" min="0" max="1" step="0.01" value="0"><output id="t2o"></output></div></div>
     </div>
     <div class="grp">
-      <div class="field"><label for="hact">Attivazione nascosta σ⁽¹⁾</label>
-        <select id="hact"><option value="sigmoid">sigmoide</option><option value="tanh">tanh</option><option value="relu">ReLU</option></select></div>
-      <div class="field"><label for="oact">Attivazione di output σ⁽²⁾</label>
-        <select id="oact"><option value="sigmoid">sigmoide</option><option value="linear">lineare (identità)</option></select></div>
+      <div class="field"><label for="nh">Unità nascoste</label>
+        <select id="nh"><option value="2">2</option><option value="3" selected>3</option></select></div>
+      <div class="field"><label for="hact">Attivazione nascosta φ⁽¹⁾</label>
+        <select id="hact"><option value="sigmoid">logistica σ</option><option value="tanh">tanh</option><option value="relu">ReLU</option></select></div>
+      <div class="field"><label for="oact">Attivazione di output φ⁽²⁾</label>
+        <select id="oact"><option value="sigmoid">logistica σ</option><option value="linear">lineare (identità)</option></select></div>
     </div>
     <div class="grp">
-      <div class="field"><label for="lr">Learning rate η</label><div class="row"><input type="range" id="lr" min="0.05" max="3" step="0.05" value="0.5"><output id="lro"></output></div></div>
+      <div class="field"><label for="lr">Learning rate α</label><div class="row"><input type="range" id="lr" min="0.05" max="3" step="0.05" value="0.5"><output id="lro"></output></div></div>
       <div class="row" style="flex-wrap:wrap">
         <button class="btn" id="rand">Nuovi pesi</button>
         <button class="btn" id="train">Allena 200 passi</button>
@@ -262,9 +278,10 @@ footer{padding-block:24px 40px; color:var(--muted); font-size:13px; border-top:1
       <ol>
         <li><a href="#notazione">Notazione</a></li>
         <li><a href="#catena">Regola della catena</a></li>
-        <li><a href="#delta">L'errore δ</a></li>
-        <li><a href="#equazioni">Le quattro equazioni</a></li>
-        <li><a href="#algoritmo">Algoritmo</a></li>
+        <li><a href="#forward">Forward pass</a></li>
+        <li><a href="#vettore-g">Il vettore g</a></li>
+        <li><a href="#backward">Backward riga per riga</a></li>
+        <li><a href="#softmax">Softmax</a></li>
         <li><a href="#batch">Mini-batch</a></li>
         <li><a href="#costo">Costo computazionale</a></li>
         <li><a href="#verifica">Verifica numerica</a></li>
@@ -274,25 +291,35 @@ footer{padding-block:24px 40px; color:var(--muted); font-size:13px; border-top:1
 
     <article>
       <h2 id="notazione"><span class="sec">§1</span>Notazione</h2>
-      <p>Consideriamo una rete feed-forward con $L$ strati. Lo strato $l$ ha $n_l$ neuroni; lo strato $0$ è l'input. Per ogni strato $l = 1,\dots,L$ ci sono una matrice dei pesi $W^{(l)} \in \mathbb{R}^{n_l \times n_{l-1}}$ e un vettore di bias $b^{(l)} \in \mathbb{R}^{n_l}$. L'elemento $w^{(l)}_{ij}$ è il peso che collega il neurone $j$ dello strato $l-1$ al neurone $i$ dello strato $l$: prima l'indice di arrivo, poi quello di partenza.</p>
-      <p>Il <b>forward pass</b> è definito ricorsivamente:</p>
-      <div class="eq">$$a^{(0)} = x,\qquad z^{(l)} = W^{(l)}a^{(l-1)} + b^{(l)},\qquad a^{(l)} = \sigma^{(l)}\!\big(z^{(l)}\big),\qquad l = 1,\dots,L.$$</div>
-      <p>$z^{(l)}$ è la <i>pre-attivazione</i> (somma pesata), $a^{(l)}$ l'<i>attivazione</i>; la funzione $\sigma^{(l)}$ si applica componente per componente. In componenti:</p>
-      <div class="eq">$$z^{(l)}_i = \sum_{j=1}^{n_{l-1}} w^{(l)}_{ij}\,a^{(l-1)}_j + b^{(l)}_i .$$</div>
-      <p>L'output è $\hat y = a^{(L)}$ e la loss su un esempio $(x,y)$ è una funzione scalare $\mathcal L(\hat y, y)$. Nel laboratorio usiamo l'errore quadratico</p>
-      <div class="eq">$$\mathcal L = \tfrac12\,\big\|a^{(L)} - y\big\|^2 = \tfrac12\sum_{k}\big(a^{(L)}_k - y_k\big)^2 .$$</div>
-      <p>L'obiettivo della backpropagation è calcolare <b>tutte</b> le derivate parziali $\partial\mathcal L/\partial w^{(l)}_{ij}$ e $\partial\mathcal L/\partial b^{(l)}_i$, che servono alla discesa del gradiente $\theta \leftarrow \theta - \eta\,\nabla_\theta\mathcal L$. La rete del laboratorio ha $L = 2$, $n_0 = 2$, $n_1 = 3$, $n_2 = 2$: in totale $6 + 3 + 6 + 2 = 17$ parametri.</p>
-      <p>Derivate delle attivazioni usate:</p>
-      <div class="eq">$$\sigma(z) = \frac{1}{1+e^{-z}},\ \ \sigma'(z) = \sigma(z)\big(1-\sigma(z)\big);\qquad \tanh'(z) = 1-\tanh^2 z;\qquad \mathrm{ReLU}'(z) = \mathbb{1}[z>0].$$</div>
+      <p>Uso la notazione delle slide del corso. La rete ha $L$ layer; il layer $k$ ha $m_k$ unità e il layer $0$ è l'input. Ogni layer $k = 1,\dots,L$ ha una matrice dei pesi $\vW^{(k)} \in \mathbb{R}^{m_k \times m_{k-1}}$ e un vettore di bias $\vb^{(k)} \in \mathbb{R}^{m_k}$. L'elemento $W^{(k)}_{ij}$ è il peso che va dall'unità $j$ del layer $k-1$ all'unità $i$ del layer $k$.</p>
+      <div class="tablewrap"><table class="map">
+        <thead><tr><th>Simbolo</th><th>Significato</th></tr></thead>
+        <tbody>
+          <tr><td>$\vx$, $\vt$</td><td>input e target dell'esempio</td></tr>
+          <tr><td>$\va^{(k)}$</td><td>pre-attivazione del layer $k$ (somma pesata più bias)</td></tr>
+          <tr><td>$\vh^{(k)}$</td><td>attivazione del layer $k$, con $\vh^{(0)} = \vx$</td></tr>
+          <tr><td>$\phi^{(k)}$</td><td>funzione di attivazione del layer $k$ (ad esempio la logistica $\sigma$)</td></tr>
+          <tr><td>$\vy = \vh^{(L)}$</td><td>predizione della rete</td></tr>
+          <tr><td>$\mathcal L(\vy, \vt)$, $J(\vth)$</td><td>loss su un esempio, costo sul dataset</td></tr>
+          <tr><td>$\vth$, $\alpha$</td><td>tutti i parametri $\vW^{(k)}, \vb^{(k)}$; learning rate</td></tr>
+          <tr><td>$\vg$</td><td>il gradiente che il backward pass porta all'indietro (§4)</td></tr>
+          <tr><td>$\odot$</td><td>prodotto componente per componente</td></tr>
+        </tbody>
+      </table></div>
+      <p>La loss del laboratorio è l'errore quadratico $\mathcal L = \tfrac12\|\vy - \vt\|_2^2$. L'addestramento cerca i $\vth$ che minimizzano il costo, ad esempio con SGD: per ogni minibatch $\mathcal B$ si calcola $\hat\vg \leftarrow \nabla_{\vth} J_{\mathcal B}(\vth)$ e si aggiorna $\vth \leftarrow \vth - \alpha\hat\vg$. Siccome</p>
+      <div class="eq">$$J_{\mathcal B}(\vth) = \frac{1}{|\mathcal B|}\sum_{i\in\mathcal B}\mathcal L\big(f(\vx^{(i)}), \vt^{(i)}\big)\quad\Longrightarrow\quad \nabla_{\vth}J_{\mathcal B}(\vth) = \frac{1}{|\mathcal B|}\sum_{i\in\mathcal B}\nabla_{\vth}\mathcal L\big(f(\vx^{(i)}), \vt^{(i)}\big),$$</div>
+      <p>basta saper calcolare il gradiente della loss su <b>un solo esempio</b>: per un minibatch si fa la media. La backpropagation fa esattamente questo. Attenzione: il termine indica solo il calcolo del gradiente, non l'intero algoritmo di addestramento.</p>
+      <p>Derivate delle attivazioni:</p>
+      <div class="eq">$$\sigma(x) = \frac{1}{1+e^{-x}},\ \ \sigma'(x) = \sigma(x)\big(1-\sigma(x)\big);\qquad \tanh'(x) = 1-\tanh^2(x);\qquad \mathrm{ReLU}'(x) = \begin{cases}1 & x>0\\ 0 & x\le 0\ (\text{per convenzione in } 0)\end{cases}$$</div>
 
       <h2 id="catena"><span class="sec">§2</span>Regola della catena</h2>
-      <p>Se $\mathcal L$ dipende da una variabile $t$ solo attraverso le variabili intermedie $u_1,\dots,u_m$, allora</p>
-      <div class="eq">$$\frac{\partial \mathcal L}{\partial t} = \sum_{k=1}^{m}\frac{\partial \mathcal L}{\partial u_k}\,\frac{\partial u_k}{\partial t}.$$</div>
-      <p>In forma vettoriale è il prodotto di Jacobiane: $\dfrac{\partial \mathcal L}{\partial t} = \dfrac{\partial \mathcal L}{\partial u}\,\dfrac{\partial u}{\partial t}$. Applicata a un grafo computazionale, dice che la derivata di $\mathcal L$ rispetto a un nodo è la somma, su tutti i cammini dal nodo a $\mathcal L$, del prodotto delle derivate locali lungo il cammino.</p>
-      <p>Il problema è che in una rete profonda il numero di cammini cresce come $\prod_l n_l$, cioè in modo esponenziale con la profondità. La backpropagation evita di enumerarli: calcola le derivate dall'uscita verso l'ingresso e <b>riusa</b> ciascun risultato intermedio. È programmazione dinamica sul grafo.</p>
+      <p>Per funzioni di una variabile, $\dfrac{d}{dx}f(g(x)) = f'(g(x))\,g'(x)$. Se invece $f$ dipende da $x$ attraverso $m$ variabili intermedie $u_1(x),\dots,u_m(x)$, i contributi si sommano:</p>
+      <div class="eq">$$\frac{\partial f}{\partial x} = \sum_{i=1}^{m}\frac{\partial f}{\partial u_i}\,\frac{\partial u_i}{\partial x}.$$</div>
+      <p>L'intuizione: perturbare $x$ di $\Delta x$ cambia ogni $u_i$ di circa $\frac{\partial u_i}{\partial x}\Delta x$, e per perturbazioni piccole gli effetti su $f$ si sommano. Su un grafo computazionale significa sommare su tutti i cammini da $x$ a $f$.</p>
+      <p>Scritta in modo ingenuo, l'espressione del gradiente diventa molto più lunga della funzione e ripete gli stessi sottotermini. La <b>differenziazione automatica in modalità inversa</b> (reverse-mode AD) risolve il problema: percorre il grafo dall'uscita verso l'ingresso e calcola ogni derivata una sola volta, riusandola per tutti i nodi a monte. La backpropagation è reverse-mode AD applicata a una rete neurale.</p>
 
       <h3>Esempio su un solo neurone</h3>
-      <p>Il grafo sotto calcola $\mathcal L = \tfrac12(\sigma(wx+b) - y)^2$. Sopra ogni nodo c'è il valore del forward (blu), sotto il gradiente $\partial\mathcal L/\partial(\cdot)$ (arancio). Ogni gradiente si ottiene moltiplicando il gradiente del nodo a valle per la derivata locale: <i>gradiente in ingresso = gradiente in uscita × derivata locale</i>.</p>
+      <p>Il grafo sotto è un neurone con la stessa struttura delle slide: $u = w\,x$, $a = u + b$, $y = \sigma(a)$, $\mathcal L = \tfrac12(y - t)^2$. Sopra ogni nodo c'è il valore del forward (blu), sotto il gradiente $\partial\mathcal L/\partial(\cdot)$ (arancio). Ogni gradiente è il gradiente del nodo a valle moltiplicato per la derivata locale.</p>
       <div class="demo">
         <div class="svgbox"><svg id="chain" viewBox="0 0 780 260" aria-label="Grafo computazionale di un neurone"></svg></div>
         <ul class="chainlist" id="chainlist"></ul>
@@ -300,89 +327,96 @@ footer{padding-block:24px 40px; color:var(--muted); font-size:13px; border-top:1
           <div class="field"><label for="cx">x</label><div class="row"><input type="range" id="cx" min="-2" max="2" step="0.05" value="1.5"><output id="cxo"></output></div></div>
           <div class="field"><label for="cw">w</label><div class="row"><input type="range" id="cw" min="-2" max="2" step="0.05" value="0.8"><output id="cwo"></output></div></div>
           <div class="field"><label for="cb">b</label><div class="row"><input type="range" id="cb" min="-2" max="2" step="0.05" value="-0.5"><output id="cbo"></output></div></div>
-          <div class="field"><label for="cy">y</label><div class="row"><input type="range" id="cy" min="0" max="1" step="0.05" value="0"><output id="cyo"></output></div></div>
+          <div class="field"><label for="ct">t</label><div class="row"><input type="range" id="ct" min="0" max="1" step="0.01" value="0"><output id="cto"></output></div></div>
         </div>
       </div>
-      <p>Nota che $\partial\mathcal L/\partial w = \partial\mathcal L/\partial z \cdot x$: il gradiente di un peso è il gradiente "che arriva" al neurone moltiplicato per il valore che entra dal peso. Questa è, in piccolo, l'equazione BP4.</p>
+      <p>Nota che $\partial\mathcal L/\partial w = \partial\mathcal L/\partial a \cdot x$: il gradiente di un peso è il gradiente che arriva alla pre-attivazione per il valore che entra dal peso. In piccolo, è la riga 4 del backward pass.</p>
 
-      <h2 id="delta"><span class="sec">§3</span>L'errore δ</h2>
-      <p>Definiamo l'<b>errore</b> del neurone $i$ nello strato $l$ come la derivata della loss rispetto alla sua pre-attivazione:</p>
-      <div class="eq">$$\delta^{(l)}_i := \frac{\partial \mathcal L}{\partial z^{(l)}_i},\qquad \delta^{(l)} \in \mathbb{R}^{n_l}.$$</div>
-      <p>La scelta di $z$ non è casuale. Ogni parametro dello strato $l$ influenza la loss soltanto attraverso $z^{(l)}$, e lo strato $l$ influenza tutto ciò che segue soltanto attraverso $z^{(l+1)}$. Quindi $\delta^{(l)}$ è esattamente l'informazione che serve: una volta noto, i gradienti dei parametri dello strato si ottengono localmente, e $\delta^{(l-1)}$ si ricava da $\delta^{(l)}$ senza guardare oltre.</p>
+      <h2 id="forward"><span class="sec">§3</span>Forward pass</h2>
+      <p>Dato l'input $\vx$ si calcolano la predizione, la loss e <b>tutte</b> le pre-attivazioni e attivazioni intermedie, che il backward pass riuserà:</p>
+<pre class="code"><span class="c">Forward pass</span>
+<span class="ln">1</span>  <span class="f">h⁽⁰⁾ ← x</span>
+<span class="ln">2</span>  <span class="f">for k = 1, …, L do</span>
+<span class="ln">3</span>  <span class="f">    a⁽ᵏ⁾ ← W⁽ᵏ⁾ h⁽ᵏ⁻¹⁾ + b⁽ᵏ⁾</span>
+<span class="ln">4</span>  <span class="f">    h⁽ᵏ⁾ ← φ⁽ᵏ⁾(a⁽ᵏ⁾)</span>
+<span class="ln">5</span>  <span class="f">end</span>
+<span class="ln">6</span>  <span class="f">y ← h⁽ᴸ⁾</span>
+<span class="ln">7</span>  <span class="f">return 𝓛(y, t) e tutti gli a⁽ᵏ⁾, h⁽ᵏ⁾</span></pre>
+      <p>In componenti la riga 3 è $a^{(k)}_i = \sum_j W^{(k)}_{ij}\,h^{(k-1)}_j + b^{(k)}_i$. Nel laboratorio $L = 2$: un layer nascosto $\vh^{(1)}$ e l'output $\vy = \vh^{(2)}$.</p>
 
-      <h2 id="equazioni"><span class="sec">§4</span>Le quattro equazioni</h2>
-      <p>Uso $\odot$ per il prodotto componente per componente (Hadamard) e scrivo $\sigma'$ al posto di $\sigma'^{(l)}$ quando lo strato è chiaro.</p>
+      <h2 id="vettore-g"><span class="sec">§4</span>Il vettore g</h2>
+      <p>Il backward pass usa un solo vettore, $\vg$, che contiene sempre il gradiente della loss rispetto alla quantità che si sta elaborando. Parte da $\partial\mathcal L/\partial\vy$ e, a ogni iterazione $k = L,\dots,1$:</p>
+      <div class="eq">$$\underbrace{\frac{\partial\mathcal L}{\partial\vh^{(k)}}}_{\vg\text{ a inizio iterazione}} \xrightarrow{\ \text{riga 3}\ } \underbrace{\frac{\partial\mathcal L}{\partial\va^{(k)}}}_{g_i \,=\, \partial\mathcal L/\partial a^{(k)}_i} \xrightarrow{\ \text{riga 6}\ } \underbrace{\frac{\partial\mathcal L}{\partial\vh^{(k-1)}}}_{\vg\text{ per l'iterazione }k-1}$$</div>
+      <p>Il momento chiave è quando $\vg = \partial\mathcal L/\partial\va^{(k)}$. Ogni parametro del layer $k$ influenza la loss solo attraverso $\va^{(k)}$, quindi da quel vettore si ottengono localmente i gradienti di $\vW^{(k)}$ e $\vb^{(k)}$ (righe 4–5). In altri testi, ad esempio Nielsen, la stessa quantità si chiama $\boldsymbol{\delta}^{(k)}$, l'"errore" del layer.</p>
+<pre class="code"><span class="c">Backward pass</span>
+<span class="ln">1</span>  <span class="b">g ← ∂𝓛/∂y</span>
+<span class="ln">2</span>  <span class="b">for k = L, …, 2, 1 do</span>
+<span class="ln">3</span>  <span class="b">    g ← ∂𝓛/∂a⁽ᵏ⁾ = g ⊙ φ⁽ᵏ⁾′(a⁽ᵏ⁾)</span>
+<span class="ln">4</span>  <span class="b">    ∂𝓛/∂W⁽ᵏ⁾ = g h⁽ᵏ⁻¹⁾ᵀ</span>
+<span class="ln">5</span>  <span class="b">    ∂𝓛/∂b⁽ᵏ⁾ = g</span>
+<span class="ln">6</span>  <span class="b">    g ← ∂𝓛/∂h⁽ᵏ⁻¹⁾ = W⁽ᵏ⁾ᵀ g</span>          <span class="c">/* propaga il gradiente */</span>
+<span class="ln">7</span>  <span class="b">end</span>
+<span class="ln">8</span>  <span class="b">return ∂𝓛/∂W⁽ᵏ⁾, ∂𝓛/∂b⁽ᵏ⁾, ∀k = 1, …, L</span></pre>
 
-      <div class="box bp" id="bp1"><p class="bt">BP1 · errore dello strato di output</p>
-      <div class="eq">$$\delta^{(L)}_i = \frac{\partial \mathcal L}{\partial a^{(L)}_i}\,\sigma'\big(z^{(L)}_i\big)\qquad\Longleftrightarrow\qquad \delta^{(L)} = \nabla_{a^{(L)}}\mathcal L \odot \sigma'\big(z^{(L)}\big)$$</div></div>
-      <p class="proof"><span class="pt">Dimostrazione.</span> Per la regola della catena $\delta^{(L)}_i = \sum_k \frac{\partial \mathcal L}{\partial a^{(L)}_k}\frac{\partial a^{(L)}_k}{\partial z^{(L)}_i}$. Poiché l'attivazione agisce componente per componente, $a^{(L)}_k = \sigma(z^{(L)}_k)$ dipende solo da $z^{(L)}_k$: dunque $\partial a^{(L)}_k/\partial z^{(L)}_i = \sigma'(z^{(L)}_i)$ se $k=i$ e $0$ altrimenti. Della somma resta un solo termine. <span class="qed">∎</span></p>
-      <p>Per l'errore quadratico $\nabla_{a^{(L)}}\mathcal L = a^{(L)} - y$, quindi $\delta^{(L)} = (a^{(L)}-y)\odot\sigma'(z^{(L)})$.</p>
-      <p class="note">Osservazione: con softmax in uscita la Jacobiana $\partial a/\partial z$ non è diagonale e BP1 va scritta come $\delta^{(L)} = \big(\partial a^{(L)}/\partial z^{(L)}\big)^{\!\top}\nabla_{a^{(L)}}\mathcal L$. Con la cross-entropy $\mathcal L = -\sum_i y_i\log a^{(L)}_i$ (con $\sum_i y_i = 1$) il risultato si semplifica in $\delta^{(L)} = a^{(L)} - y$. Lo stesso vale per sigmoide con cross-entropy binaria.</p>
+      <h2 id="backward"><span class="sec">§5</span>Il backward pass riga per riga</h2>
 
-      <div class="box bp" id="bp2"><p class="bt">BP2 · propagazione dell'errore all'indietro</p>
-      <div class="eq">$$\delta^{(l)}_j = \sigma'\big(z^{(l)}_j\big)\sum_{i=1}^{n_{l+1}} w^{(l+1)}_{ij}\,\delta^{(l+1)}_i\qquad\Longleftrightarrow\qquad \delta^{(l)} = \Big(\big(W^{(l+1)}\big)^{\!\top}\delta^{(l+1)}\Big)\odot\sigma'\big(z^{(l)}\big)$$</div></div>
-      <p class="proof"><span class="pt">Dimostrazione.</span> $z^{(l)}_j$ influenza $\mathcal L$ solo attraverso $z^{(l+1)}_1,\dots,z^{(l+1)}_{n_{l+1}}$, quindi $\delta^{(l)}_j = \sum_i \frac{\partial \mathcal L}{\partial z^{(l+1)}_i}\frac{\partial z^{(l+1)}_i}{\partial z^{(l)}_j} = \sum_i \delta^{(l+1)}_i\frac{\partial z^{(l+1)}_i}{\partial z^{(l)}_j}$. Da $z^{(l+1)}_i = \sum_k w^{(l+1)}_{ik}\,\sigma(z^{(l)}_k) + b^{(l+1)}_i$ segue $\frac{\partial z^{(l+1)}_i}{\partial z^{(l)}_j} = w^{(l+1)}_{ij}\,\sigma'(z^{(l)}_j)$. Sostituendo e raccogliendo $\sigma'(z^{(l)}_j)$ si ottiene la tesi. <span class="qed">∎</span></p>
-      <p>Leggila così: l'errore percorre gli stessi archi del forward, in senso opposto, pesato dagli stessi pesi. La trasposta compare perché nel forward $w_{ij}$ porta da $j$ a $i$, nel backward da $i$ a $j$. Poi l'errore viene "filtrato" da $\sigma'$: un neurone saturo ($\sigma'\approx 0$) blocca il gradiente.</p>
+      <div class="box bp" id="riga1"><p class="bt">Riga 1 · inizializzazione</p>
+      <div class="eq">$$\vg \leftarrow \frac{\partial\mathcal L}{\partial\vy} = \nabla_{\vy}\mathcal L$$</div></div>
+      <p>Dipende solo dalla loss e si calcola analiticamente. Per $\mathcal L = \tfrac12\|\vy - \vt\|_2^2$ si ha $\nabla_{\vy}\mathcal L = \vy - \vt$.</p>
 
-      <div class="box bp" id="bp3"><p class="bt">BP3 · gradiente dei bias</p>
-      <div class="eq">$$\frac{\partial \mathcal L}{\partial b^{(l)}_i} = \delta^{(l)}_i\qquad\Longleftrightarrow\qquad \nabla_{b^{(l)}}\mathcal L = \delta^{(l)}$$</div></div>
-      <p class="proof"><span class="pt">Dimostrazione.</span> $b^{(l)}_i$ compare solo in $z^{(l)}_i$, con $\partial z^{(l)}_i/\partial b^{(l)}_i = 1$. Quindi $\frac{\partial \mathcal L}{\partial b^{(l)}_i} = \delta^{(l)}_i\cdot 1$. <span class="qed">∎</span></p>
+      <div class="box bp" id="riga3"><p class="bt">Riga 3 · gradiente rispetto alla pre-attivazione</p>
+      <div class="eq">$$\vg \leftarrow \frac{\partial\mathcal L}{\partial\va^{(k)}} = \vg \odot \phi^{(k)\prime}\big(\va^{(k)}\big)$$</div></div>
+      <p class="proof"><span class="pt">Dimostrazione.</span> Per la regola della catena $\dfrac{\partial\mathcal L}{\partial a^{(k)}_i} = \sum_j \dfrac{\partial\mathcal L}{\partial h^{(k)}_j}\dfrac{\partial h^{(k)}_j}{\partial a^{(k)}_i}$. Se $\phi^{(k)}$ agisce componente per componente, $h^{(k)}_j = \phi^{(k)}(a^{(k)}_j)$ dipende solo da $a^{(k)}_j$: la derivata vale $\phi^{(k)\prime}(a^{(k)}_i)$ per $j = i$ e $0$ altrimenti. Resta un solo termine, $\dfrac{\partial\mathcal L}{\partial h^{(k)}_i}\,\phi^{(k)\prime}(a^{(k)}_i) = g_i\,\phi^{(k)\prime}(a^{(k)}_i)$. <span class="qed">∎</span></p>
+      <p>Il valore $\va^{(k)}$ viene dal forward pass. Per la logistica conviene riusare l'attivazione salvata: $\sigma'(\va^{(k)}) = \vh^{(k)}\odot(1 - \vh^{(k)})$. Un'unità satura ($\phi' \approx 0$) blocca il gradiente.</p>
 
-      <div class="box bp" id="bp4"><p class="bt">BP4 · gradiente dei pesi</p>
-      <div class="eq">$$\frac{\partial \mathcal L}{\partial w^{(l)}_{ij}} = \delta^{(l)}_i\,a^{(l-1)}_j\qquad\Longleftrightarrow\qquad \nabla_{W^{(l)}}\mathcal L = \delta^{(l)}\big(a^{(l-1)}\big)^{\!\top}$$</div></div>
-      <p class="proof"><span class="pt">Dimostrazione.</span> $w^{(l)}_{ij}$ compare solo in $z^{(l)}_i = \sum_k w^{(l)}_{ik}a^{(l-1)}_k + b^{(l)}_i$, con $\partial z^{(l)}_i/\partial w^{(l)}_{ij} = a^{(l-1)}_j$. Quindi $\frac{\partial \mathcal L}{\partial w^{(l)}_{ij}} = \delta^{(l)}_i\,a^{(l-1)}_j$. In forma matriciale è il prodotto esterno di $\delta^{(l)} \in \mathbb{R}^{n_l}$ e $a^{(l-1)} \in \mathbb{R}^{n_{l-1}}$, che ha la stessa forma $n_l\times n_{l-1}$ di $W^{(l)}$. <span class="qed">∎</span></p>
-      <p>Conseguenza pratica: il gradiente di un peso è grande solo se il neurone di arrivo ha errore grande <i>e</i> il neurone di partenza è attivo. Un peso che esce da un neurone con $a\approx 0$ impara lentamente.</p>
+      <div class="box bp" id="riga45"><p class="bt">Righe 4–5 · gradienti dei parametri</p>
+      <div class="eq">$$\frac{\partial\mathcal L}{\partial\vW^{(k)}} = \vg\,\vh^{(k-1)T},\qquad \frac{\partial\mathcal L}{\partial\vb^{(k)}} = \vg$$</div></div>
+      <p class="proof"><span class="pt">Dimostrazione.</span> Qui $g_i = \partial\mathcal L/\partial a^{(k)}_i$. Il peso $W^{(k)}_{ij}$ compare solo in $a^{(k)}_i = \sum_j W^{(k)}_{ij}h^{(k-1)}_j + b^{(k)}_i$, con $\partial a^{(k)}_i/\partial W^{(k)}_{ij} = h^{(k-1)}_j$. Quindi $\dfrac{\partial\mathcal L}{\partial W^{(k)}_{ij}} = \dfrac{\partial\mathcal L}{\partial a^{(k)}_i}\dfrac{\partial a^{(k)}_i}{\partial W^{(k)}_{ij}} = g_i\,h^{(k-1)}_j$. Disponendo le derivate in una matrice $m\times n$ come $\vW^{(k)}$, la riga $i$ è $\vh^{(k-1)T}$ moltiplicata per $g_i$:</p>
+      <div class="eq">$$\frac{\partial\mathcal L}{\partial\vW^{(k)}} = \begin{bmatrix} g_1h^{(k-1)}_1 & \cdots & g_1h^{(k-1)}_n\\ \vdots & \ddots & \vdots\\ g_mh^{(k-1)}_1 & \cdots & g_mh^{(k-1)}_n\end{bmatrix} = \begin{bmatrix}g_1\\ \vdots\\ g_m\end{bmatrix}\begin{bmatrix}h^{(k-1)}_1 & \cdots & h^{(k-1)}_n\end{bmatrix} = \vg\,\vh^{(k-1)T}.$$</div>
+      <p class="proof">Per il bias $\partial a^{(k)}_i/\partial b^{(k)}_i = 1$, quindi $\partial\mathcal L/\partial b^{(k)}_i = g_i$. <span class="qed">∎</span></p>
+      <p>Conseguenza pratica: il gradiente di un peso è grande solo se l'unità di arrivo ha $g_i$ grande <i>e</i> l'unità di partenza è attiva. Per lo stesso motivo, al primo layer $\partial\mathcal L/\partial W^{(1)}_{ij} = g_i x_j$: feature su scale molto diverse ricevono aggiornamenti molto diversi, ed è uno dei motivi per normalizzare gli input.</p>
 
-      <h2 id="algoritmo"><span class="sec">§5</span>Algoritmo</h2>
-      <p>Per un esempio $(x,y)$:</p>
-<pre class="code"><span class="c"># 1. forward: calcola e MEMORIZZA z e a di ogni strato</span>
-<span class="f">a[0] = x
-for l = 1 … L:
-    z[l] = W[l] @ a[l-1] + b[l]
-    a[l] = σ_l(z[l])</span>
+      <div class="box bp" id="riga6"><p class="bt">Riga 6 · propagazione all'indietro</p>
+      <div class="eq">$$\vg \leftarrow \frac{\partial\mathcal L}{\partial\vh^{(k-1)}} = \vW^{(k)T}\vg$$</div></div>
+      <p class="proof"><span class="pt">Dimostrazione.</span> A differenza di un peso, $h^{(k-1)}_j$ influenza <b>tutte</b> le pre-attivazioni $a^{(k)}_1,\dots,a^{(k)}_m$, con $\partial a^{(k)}_i/\partial h^{(k-1)}_j = W^{(k)}_{ij}$. Per la regola della catena multivariata si somma sui cammini: $\dfrac{\partial\mathcal L}{\partial h^{(k-1)}_j} = \sum_{i=1}^m \dfrac{\partial\mathcal L}{\partial a^{(k)}_i}\dfrac{\partial a^{(k)}_i}{\partial h^{(k-1)}_j} = \sum_{i=1}^m W^{(k)}_{ij}\,g_i$. È il prodotto scalare tra la colonna $j$ di $\vW^{(k)}$ e $\vg$; impilando le $n$ componenti si ottiene $\vW^{(k)T}\vg$. <span class="qed">∎</span></p>
+      <p>Il gradiente torna indietro lungo gli stessi archi del forward, pesato dagli stessi pesi. Per $k = 1$ la riga 6 non serve, perché $\vx$ non è un parametro. Unendo le righe 6 e 3 si ottiene la ricorsione compatta</p>
+      <div class="eq">$$\frac{\partial\mathcal L}{\partial\va^{(k-1)}} = \Big(\vW^{(k)T}\,\frac{\partial\mathcal L}{\partial\va^{(k)}}\Big)\odot\phi^{(k-1)\prime}\big(\va^{(k-1)}\big).$$</div>
+      <p>Due dettagli che contano. Il backward usa $\va^{(k)}$ e $\vh^{(k)}$ salvati durante il forward, che quindi vanno tenuti in memoria. E la riga 6 usa i pesi $\vW^{(k)}$ <i>prima</i> dell'aggiornamento: si calcolano tutti i gradienti, poi si fa il passo di SGD $\vth \leftarrow \vth - \alpha\,\partial\mathcal L/\partial\vth$.</p>
 
-<span class="c"># 2. errore di output (BP1)</span>
-<span class="b">δ[L] = grad_a Loss(a[L], y) ⊙ σ'_L(z[L])</span>
+      <h2 id="softmax"><span class="sec">§6</span>Softmax e cross-entropy</h2>
+      <p>La riga 3 presuppone un'attivazione componente per componente. Con la softmax, $h^{(k)}_j = e^{a^{(k)}_j}/\sum_l e^{a^{(k)}_l}$ dipende da <b>tutti</b> gli $a^{(k)}_i$, e per la regola della catena multivariata</p>
+      <div class="eq">$$\frac{\partial\mathcal L}{\partial a^{(k)}_i} = \sum_j g_j\,\frac{\partial h^{(k)}_j}{\partial a^{(k)}_i},\qquad \frac{\partial h^{(k)}_j}{\partial a^{(k)}_i} = h^{(k)}_j\big(\delta_{ij} - h^{(k)}_i\big),\qquad \frac{\partial\mathcal L}{\partial\va^{(k)}} = \Big(\frac{\partial\vh^{(k)}}{\partial\va^{(k)}}\Big)^{T}\vg .$$</div>
+      <p>È la stessa struttura della riga 6, con $\vW^{(k)}$ sostituita dalla Jacobiana della softmax. Le attivazioni componente per componente sono il caso in cui la Jacobiana è diagonale e il prodotto si riduce a $\vg\odot\phi^{(k)\prime}(\va^{(k)})$.</p>
+      <p>Per la classificazione multiclasse, con $\vy = \mathrm{softmax}(\va^{(L)})$, $\vt$ one-hot e $\mathcal L = -\sum_j t_j\log y_j$, si ha $g_j = -t_j/y_j$ e sostituendo:</p>
+      <div class="eq">$$\frac{\partial\mathcal L}{\partial a^{(L)}_i} = \sum_j\Big(-\frac{t_j}{y_j}\Big)y_j(\delta_{ij} - y_i) = -t_i + y_i\sum_j t_j = y_i - t_i\quad\Longrightarrow\quad \frac{\partial\mathcal L}{\partial\va^{(L)}} = \vy - \vt .$$</div>
+      <p>Niente Jacobiana. Per questo i framework uniscono softmax e cross-entropy in un'unica operazione calcolata dai logit $\va^{(L)}$: costa meno ed è numericamente più stabile.</p>
 
-<span class="c"># 3. backward: dall'ultimo strato al primo (BP2, BP3, BP4)</span>
-<span class="b">for l = L … 1:
-    dW[l] = δ[l] @ a[l-1].T
-    db[l] = δ[l]
-    if l > 1:
-        δ[l-1] = (W[l].T @ δ[l]) ⊙ σ'_{l-1}(z[l-1])</span>
+      <h2 id="batch"><span class="sec">§7</span>Mini-batch in forma matriciale</h2>
+      <p>In pratica si elabora un intero minibatch in parallelo. Impilando gli esempi in colonna, $\mathbf H^{(0)} = \mathbf X \in \mathbb{R}^{m_0\times|\mathcal B|}$:</p>
+      <div class="eq">$$\mathbf A^{(k)} = \vW^{(k)}\mathbf H^{(k-1)} + \vb^{(k)}\mathbf 1^{T},\qquad \mathbf H^{(k)} = \phi^{(k)}\big(\mathbf A^{(k)}\big),$$</div>
+      <div class="eq">$$\mathbf G \leftarrow \mathbf G\odot\phi^{(k)\prime}\big(\mathbf A^{(k)}\big),\qquad \nabla_{\vW^{(k)}}J_{\mathcal B} = \tfrac{1}{|\mathcal B|}\,\mathbf G\,\mathbf H^{(k-1)T},\qquad \nabla_{\vb^{(k)}}J_{\mathcal B} = \tfrac{1}{|\mathcal B|}\,\mathbf G\,\mathbf 1,\qquad \mathbf G \leftarrow \vW^{(k)T}\mathbf G,$$</div>
+      <p>dove la colonna $s$ di $\mathbf G$ è il vettore $\vg$ dell'esempio $s$. Il prodotto $\mathbf G\,\mathbf H^{(k-1)T}$ somma automaticamente i prodotti esterni di tutti gli esempi.</p>
 
-<span class="c"># 4. aggiornamento (discesa del gradiente)</span>
-for l = 1 … L:
-    W[l] -= η · dW[l]
-    b[l] -= η · db[l]</pre>
-      <p>Due dettagli che contano. Il backward usa i valori $z^{(l)}$ e $a^{(l)}$ salvati durante il forward, quindi vanno tenuti in memoria. E $\delta^{(l-1)}$ si calcola con i pesi $W^{(l)}$ <i>prima</i> dell'aggiornamento: si calcolano tutti i gradienti, poi si aggiorna.</p>
+      <h2 id="costo"><span class="sec">§8</span>Costo computazionale</h2>
+      <p>Consideriamo $L$ layer da $m$ unità ciascuno. Il forward pass fa una moltiplicazione e una somma per ogni peso: $\mathcal O(Lm^2)$. Il backward pass fa più operazioni (riga 6 e righe 4–5 costano circa $m^2$ ciascuna per layer), ma resta $\mathcal O(Lm^2)$. Calcolare il gradiente costa quindi quanto un forward pass, a meno di una costante.</p>
+      <p>La memoria è il prezzo da pagare: tutti gli $\va^{(k)}$ e $\vh^{(k)}$ vanno conservati, $\mathcal O(Lm)$ per esempio. In inferenza non servono, e i framework permettono di disattivarne il salvataggio (ad esempio <code>torch.no_grad()</code>).</p>
+      <p>L'alternativa ingenua, le differenze finite, richiede due forward pass per <i>ciascuno</i> dei $P \approx Lm^2$ parametri: costo $\mathcal O(P\cdot Lm^2)$. La modalità inversa vince perché la funzione ha molti input (i parametri) e un solo output scalare (la loss).</p>
 
-      <h2 id="batch"><span class="sec">§6</span>Mini-batch in forma matriciale</h2>
-      <p>Con $m$ esempi la loss è la media $\mathcal L = \frac1m\sum_{s=1}^m \mathcal L^{(s)}$, e per linearità il gradiente è la media dei gradienti. Impilando gli esempi in colonna, $A^{(0)} = X \in \mathbb{R}^{n_0\times m}$:</p>
-      <div class="eq">$$Z^{(l)} = W^{(l)}A^{(l-1)} + b^{(l)}\mathbf 1_m^{\!\top},\qquad A^{(l)} = \sigma\big(Z^{(l)}\big),$$</div>
-      <div class="eq">$$\Delta^{(l)} = \Big(\big(W^{(l+1)}\big)^{\!\top}\Delta^{(l+1)}\Big)\odot\sigma'\big(Z^{(l)}\big),\qquad \nabla_{W^{(l)}}\mathcal L = \tfrac1m\,\Delta^{(l)}\big(A^{(l-1)}\big)^{\!\top},\qquad \nabla_{b^{(l)}}\mathcal L = \tfrac1m\,\Delta^{(l)}\mathbf 1_m,$$</div>
-      <p>dove la colonna $s$ di $\Delta^{(l)}$ è il vettore $\delta^{(l)}$ dell'esempio $s$. Il prodotto $\Delta^{(l)}(A^{(l-1)})^\top$ somma automaticamente i prodotti esterni di tutti gli esempi.</p>
-
-      <h2 id="costo"><span class="sec">§7</span>Costo computazionale</h2>
-      <p>Sia $P = \sum_l n_l n_{l-1}$ il numero di pesi. Il forward costa $O(P)$ moltiplicazioni: ogni peso si usa una volta. Nel backward BP2 costa $n_{l+1}n_l$ operazioni per strato e BP4 ne costa $n_l n_{l-1}$, quindi anche il backward è $O(P)$, circa il doppio del forward. Un passo completo costa quindi qualche volta un forward.</p>
-      <p>L'alternativa ingenua, le differenze finite, richiede due forward per <i>ciascun</i> parametro: costo $O(P^2)$. Con $P = 10^6$ la differenza è un fattore dell'ordine di $10^6$.</p>
-      <p>In termini di differenziazione automatica, la backpropagation è la <b>modalità inversa</b> (reverse mode). È efficiente perché la funzione ha molti input (i parametri) e un solo output scalare (la loss): una sola passata all'indietro dà il gradiente completo. La modalità diretta (forward mode) richiederebbe una passata per ogni parametro. Il prezzo della modalità inversa è la memoria: tutte le attivazioni del forward vanno conservate.</p>
-
-      <h2 id="verifica"><span class="sec">§8</span>Verifica numerica del gradiente</h2>
-      <p>Per controllare un'implementazione si confronta ogni derivata con la differenza finita centrata, che ha errore $O(\varepsilon^2)$:</p>
-      <div class="eq">$$\frac{\partial \mathcal L}{\partial \theta_k} \approx \frac{\mathcal L(\theta + \varepsilon e_k) - \mathcal L(\theta - \varepsilon e_k)}{2\varepsilon},\qquad \text{errore relativo} = \frac{|g_{\text{bp}} - g_{\text{num}}|}{\max\big(|g_{\text{bp}}| + |g_{\text{num}}|,\ 10^{-12}\big)}.$$</div>
-      <p>La tabella confronta, sui 17 parametri della rete del laboratorio e con lo stato attuale, i gradienti della backpropagation con quelli numerici ($\varepsilon = 10^{-5}$). Si aggiorna quando cambi input, target, attivazioni o pesi. Un errore relativo sotto $10^{-7}$ indica un'implementazione corretta. Con ReLU può comparire un errore grande se una pre-attivazione è vicinissima a $0$, dove la funzione non è derivabile.</p>
+      <h2 id="verifica"><span class="sec">§9</span>Verifica numerica del gradiente</h2>
+      <p>Per controllare un'implementazione si confronta ogni derivata con la differenza finita centrata, che ha errore $\mathcal O(\varepsilon^2)$:</p>
+      <div class="eq">$$\frac{\partial \mathcal L}{\partial \theta_k} \approx \frac{\mathcal L(\vth + \varepsilon\,\mathbf e_k) - \mathcal L(\vth - \varepsilon\,\mathbf e_k)}{2\varepsilon},\qquad \text{errore relativo} = \frac{|g_{\text{bp}} - g_{\text{num}}|}{\max\big(|g_{\text{bp}}| + |g_{\text{num}}|,\ 10^{-12}\big)}.$$</div>
+      <p>La tabella confronta, su tutti i parametri della rete del laboratorio e con lo stato attuale, i gradienti della backpropagation con quelli numerici ($\varepsilon = 10^{-5}$). Si aggiorna quando cambi input, target, attivazioni o pesi. Un errore relativo sotto $10^{-7}$ indica un'implementazione corretta. Con ReLU può comparire un errore grande se una pre-attivazione è vicinissima a $0$, dove la funzione non è derivabile.</p>
       <div class="tablewrap"><table id="gc"><thead><tr><th>Parametro</th><th>Backprop</th><th>Differenze finite</th><th>Errore relativo</th></tr></thead><tbody></tbody></table></div>
 
-      <h2 id="svanisce"><span class="sec">§9</span>Gradiente che svanisce</h2>
-      <p>Srotolando BP2 da $L$ fino allo strato $l$, con $D^{(k)} = \mathrm{diag}\big(\sigma'(z^{(k)})\big)$:</p>
-      <div class="eq">$$\delta^{(l)} = D^{(l)}\big(W^{(l+1)}\big)^{\!\top} D^{(l+1)}\big(W^{(l+2)}\big)^{\!\top}\cdots D^{(L-1)}\big(W^{(L)}\big)^{\!\top}\delta^{(L)},$$</div>
-      <div class="eq">$$\big\|\delta^{(l)}\big\| \le \big\|\delta^{(L)}\big\|\prod_{k=l}^{L-1}\big\|D^{(k)}\big\|\,\big\|W^{(k+1)}\big\|.$$</div>
-      <p>Per la sigmoide $\sigma'(z) \le 1/4$, quindi $\|D^{(k)}\| \le 1/4$: se i pesi non sono grandi, l'errore si riduce di un fattore almeno $4$ per strato e gli strati iniziali smettono di imparare. Se invece i prodotti $\|D\|\|W\|$ superano $1$, il gradiente esplode. Le soluzioni standard agiscono proprio su questi fattori: ReLU (derivata $1$ dove è attiva), inizializzazioni come Xavier e He (tengono $\|W\|$ vicino alla scala giusta), batch normalization, connessioni residue (aggiungono un termine identità alla Jacobiana).</p>
-      <p>Nel laboratorio puoi vederlo in piccolo: con la sigmoide gli errori $\delta^{(1)}$ dello strato nascosto sono in genere molto più piccoli di $\delta^{(2)}$.</p>
+      <h2 id="svanisce"><span class="sec">§10</span>Gradiente che svanisce</h2>
+      <p>Srotolando la ricorsione di §5 dall'output fino al layer $k$, con $\mathbf D^{(j)} = \mathrm{diag}\big(\phi^{(j)\prime}(\va^{(j)})\big)$:</p>
+      <div class="eq">$$\frac{\partial\mathcal L}{\partial\va^{(k)}} = \mathbf D^{(k)}\vW^{(k+1)T}\mathbf D^{(k+1)}\vW^{(k+2)T}\cdots\mathbf D^{(L-1)}\vW^{(L)T}\mathbf D^{(L)}\,\nabla_{\vy}\mathcal L,$$</div>
+      <div class="eq">$$\Big\|\frac{\partial\mathcal L}{\partial\va^{(k)}}\Big\| \le \big\|\nabla_{\vy}\mathcal L\big\|\,\big\|\mathbf D^{(L)}\big\|\prod_{j=k}^{L-1}\big\|\mathbf D^{(j)}\big\|\,\big\|\vW^{(j+1)}\big\|.$$</div>
+      <p>Per la logistica $\sigma'(\cdot) \le 0.25$, quindi ogni layer moltiplica il gradiente per un fattore al più $0.25$ (a parte i pesi): con molti layer il gradiente dei primi layer svanisce e questi smettono di imparare. Se invece i prodotti $\|\mathbf D\|\|\vW\|$ superano $1$, il gradiente esplode. Le soluzioni standard agiscono su questi fattori: ReLU (derivata $1$ dove è attiva), inizializzazioni come Xavier e He, batch normalization, connessioni residue.</p>
+      <p>Nel laboratorio lo vedi in piccolo: nell'esercizio del corso gli elementi di $\partial\mathcal L/\partial\vW^{(1)}$ sono circa 20 volte più piccoli di quelli di $\partial\mathcal L/\partial\vW^{(2)}$.</p>
     </article>
   </section>
-  <footer>Tutti i calcoli avvengono nel browser, in doppia precisione. I numeri sono arrotondati a 3 decimali solo per la visualizzazione.</footer>
+  <footer>Tutti i calcoli avvengono nel browser, in doppia precisione. I numeri sono arrotondati a 4 decimali solo per la visualizzazione.</footer>
 </div>
 
 <script>
@@ -395,39 +429,44 @@ const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').match
 /* ---------------- matematica ---------------- */
 const sig = z => 1 / (1 + Math.exp(-z));
 const ACT = {
-  sigmoid: { f: sig, d: z => { const s = sig(z); return s * (1 - s); }, tex: '\\sigma' },
-  tanh:    { f: Math.tanh, d: z => 1 - Math.tanh(z) ** 2, tex: '\\tanh' },
-  relu:    { f: z => Math.max(0, z), d: z => z > 0 ? 1 : 0, tex: '\\mathrm{ReLU}' },
-  linear:  { f: z => z, d: () => 1, tex: '\\mathrm{id}' }
+  sigmoid: { f: sig, d: z => { const s = sig(z); return s * (1 - s); }, tex: '\\sigma', dtex: (h) => String.raw`\vh\odot(1-\vh)` },
+  tanh:    { f: Math.tanh, d: z => 1 - Math.tanh(z) ** 2, tex: '\\tanh', dtex: () => String.raw`1-\vh\odot\vh` },
+  relu:    { f: z => Math.max(0, z), d: z => z > 0 ? 1 : 0, tex: '\\mathrm{ReLU}', dtex: () => String.raw`\mathbb{1}[\va>0]` },
+  linear:  { f: z => z, d: () => 1, tex: '\\mathrm{id}', dtex: () => '\\mathbf{1}' }
 };
 
 function mulberry32(a){ return function(){ a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 let rng = mulberry32(7);
 const r = () => Math.round((rng() * 2 - 1) * 100) / 100;
+let NH = 3;
 function randomParams(){
-  return { W1: [[r(), r()], [r(), r()], [r(), r()]], b1: [r() * .5, r() * .5, r() * .5],
-           W2: [[r(), r(), r()], [r(), r(), r()]], b2: [r() * .5, r() * .5] };
+  const W1 = [], b1 = [], W2 = [[], []];
+  for (let i = 0; i < NH; i++) { W1.push([r(), r()]); b1.push(Math.round(r() * 50) / 100); W2[0].push(r()); W2[1].push(r()); }
+  return { W1, b1, W2, b2: [Math.round(r() * 50) / 100, Math.round(r() * 50) / 100] };
 }
 const clone = P => JSON.parse(JSON.stringify(P));
+const RANGE = n => [...Array(n).keys()];
 
 function forward(P, x, ha, oa){
-  const z1 = P.W1.map((row, i) => row[0] * x[0] + row[1] * x[1] + P.b1[i]);
-  const a1 = z1.map(ACT[ha].f);
-  const z2 = P.W2.map((row, k) => row[0] * a1[0] + row[1] * a1[1] + row[2] * a1[2] + P.b2[k]);
-  const a2 = z2.map(ACT[oa].f);
-  const L = 0.5 * a2.reduce((s, a, k) => s + (a - S.y[k]) ** 2, 0);
-  return { z1, a1, z2, a2, L };
+  const a1 = P.W1.map((row, i) => row[0] * x[0] + row[1] * x[1] + P.b1[i]);
+  const h1 = a1.map(ACT[ha].f);
+  const a2 = P.W2.map((row, k) => row.reduce((s, w, i) => s + w * h1[i], 0) + P.b2[k]);
+  const y = a2.map(ACT[oa].f);
+  const L = 0.5 * y.reduce((s, v, k) => s + (v - S.t[k]) ** 2, 0);
+  return { a1, h1, a2, y, L };
 }
-function backward(P, x, y, c, ha, oa){
-  const dz2 = c.z2.map(ACT[oa].d), dz1 = c.z1.map(ACT[ha].d);
-  const d2 = c.a2.map((a, k) => (a - y[k]) * dz2[k]);
-  const gW2 = d2.map(d => c.a1.map(a => d * a));
-  const back = [0, 1, 2].map(i => P.W2[0][i] * d2[0] + P.W2[1][i] * d2[1]);
-  const d1 = back.map((s, i) => s * dz1[i]);
-  const gW1 = d1.map(d => x.map(xx => d * xx));
-  return { dz2, dz1, d2, gW2, gb2: d2.slice(), back, d1, gW1, gb1: d1.slice() };
+function backward(P, x, t, c, ha, oa){
+  const gy = c.y.map((v, k) => v - t[k]);                                    // riga 1
+  const dphi2 = c.a2.map(ACT[oa].d);
+  const g2 = gy.map((g, k) => g * dphi2[k]);                                 // riga 3, k = 2
+  const gW2 = g2.map(g => c.h1.map(h => g * h));                             // riga 4
+  const gh1 = c.h1.map((_, i) => P.W2[0][i] * g2[0] + P.W2[1][i] * g2[1]);  // riga 6
+  const dphi1 = c.a1.map(ACT[ha].d);
+  const g1 = gh1.map((g, i) => g * dphi1[i]);                                // riga 3, k = 1
+  const gW1 = g1.map(g => x.map(xx => g * xx));
+  return { gy, dphi2, g2, gW2, gb2: g2.slice(), gh1, dphi1, g1, gW1, gb1: g1.slice() };
 }
-function step_(P, g, lr){
+function sgd(P, g, lr){
   const Q = clone(P);
   Q.W1 = Q.W1.map((row, i) => row.map((w, j) => w - lr * g.gW1[i][j]));
   Q.b1 = Q.b1.map((b, i) => b - lr * g.gb1[i]);
@@ -436,44 +475,52 @@ function step_(P, g, lr){
   return Q;
 }
 const flat = P => [...P.W1.flat(), ...P.b1, ...P.W2.flat(), ...P.b2];
-function unflat(v){ return { W1: [[v[0], v[1]], [v[2], v[3]], [v[4], v[5]]], b1: [v[6], v[7], v[8]], W2: [[v[9], v[10], v[11]], [v[12], v[13], v[14]]], b2: [v[15], v[16]] }; }
+function unflat(v){
+  let p = 0; const take = () => v[p++];
+  const W1 = RANGE(NH).map(() => [take(), take()]), b1 = RANGE(NH).map(take);
+  const W2 = [0, 1].map(() => RANGE(NH).map(take)), b2 = [take(), take()];
+  return { W1, b1, W2, b2 };
+}
 const flatG = g => [...g.gW1.flat(), ...g.gb1, ...g.gW2.flat(), ...g.gb2];
-const PNAMES = (() => {
+function pnames(){
   const n = [];
-  for (let i = 1; i <= 3; i++) for (let j = 1; j <= 2; j++) n.push(`w<sup>(1)</sup><sub>${i}${j}</sub>`);
-  for (let i = 1; i <= 3; i++) n.push(`b<sup>(1)</sup><sub>${i}</sub>`);
-  for (let k = 1; k <= 2; k++) for (let i = 1; i <= 3; i++) n.push(`w<sup>(2)</sup><sub>${k}${i}</sub>`);
+  for (let i = 1; i <= NH; i++) for (let j = 1; j <= 2; j++) n.push(`W<sup>(1)</sup><sub>${i}${j}</sub>`);
+  for (let i = 1; i <= NH; i++) n.push(`b<sup>(1)</sup><sub>${i}</sub>`);
+  for (let k = 1; k <= 2; k++) for (let i = 1; i <= NH; i++) n.push(`W<sup>(2)</sup><sub>${k}${i}</sub>`);
   for (let k = 1; k <= 2; k++) n.push(`b<sup>(2)</sup><sub>${k}</sub>`);
   return n;
-})();
+}
 
 /* ---------------- stato ---------------- */
-const S = { x: [0.6, -0.4], y: [1, 0], ha: 'sigmoid', oa: 'sigmoid', lr: 0.5, step: 0, iter: 1, sel: { t: 'node', l: 1, i: 0 }, hist: [] };
+const S = { x: [0.6, -0.4], t: [1, 0], ha: 'sigmoid', oa: 'sigmoid', lr: 0.5, step: 0, iter: 1, sel: { t: 'node', l: 1, i: 0 }, hist: [] };
 let P = randomParams(), C, G, Pnew, Cnew;
 function compute(){
   C = forward(P, S.x, S.ha, S.oa);
-  G = backward(P, S.x, S.y, C, S.ha, S.oa);
-  Pnew = step_(P, G, S.lr);
+  G = backward(P, S.x, S.t, C, S.ha, S.oa);
+  Pnew = sgd(P, G, S.lr);
   Cnew = forward(Pnew, S.x, S.ha, S.oa);
 }
 
 /* ---------------- formattazione ---------------- */
-const fix = v => (Math.abs(v) < 5e-4 ? 0 : v).toFixed(3);
-const t = v => fix(v);                         // TeX
-const p = v => v < -5e-4 ? `(${fix(v)})` : fix(v); // TeX tra parentesi se negativo
-const h = v => fix(v).replace('-', '−');       // HTML
+const fix = v => (Math.abs(v) < 5e-5 ? 0 : v).toFixed(4);
+const t = v => fix(v);                               // TeX
+const p = v => v < -5e-5 ? `(${fix(v)})` : fix(v);   // TeX, tra parentesi se negativo
+const h = v => fix(v).replace('-', '−');             // HTML
+const bm = M => String.raw`\begin{bmatrix}` + M.map(rw => rw.map(t).join(' & ')).join(String.raw`\\`) + String.raw`\end{bmatrix}`;
+const bv = v => bm(v.map(e => [e]));
+const brow = v => bm([v]);
 
 /* ---------------- passi ---------------- */
 const STEPS = [
   { k: 'i', name: 'Input' },
-  { k: 'f', name: 'Strato nascosto' },
-  { k: 'f', name: 'Output' },
+  { k: 'f', name: 'Layer 1' },
+  { k: 'f', name: 'Layer 2' },
   { k: 'f', name: 'Loss' },
-  { k: 'b', name: 'δ output' },
-  { k: 'b', name: '∇ W⁽²⁾' },
-  { k: 'b', name: 'δ nascosto' },
-  { k: 'b', name: '∇ W⁽¹⁾' },
-  { k: 'u', name: 'Aggiorna' }
+  { k: 'b', name: 'g · layer 2' },
+  { k: 'b', name: '∇ layer 2' },
+  { k: 'b', name: 'g · layer 1' },
+  { k: 'b', name: '∇ layer 1' },
+  { k: 'u', name: 'SGD' }
 ];
 const chips = $('chips');
 STEPS.forEach((s, n) => {
@@ -487,13 +534,11 @@ STEPS.forEach((s, n) => {
 /* ---------------- SVG rete ---------------- */
 const svg = $('net');
 function el(tag, attrs, parent){ const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
-const R = 28;
-const POS = { in: [[80, 150], [80, 270]], hid: [[330, 90], [330, 210], [330, 330]], out: [[580, 150], [580, 270]], loss: [730, 210] };
+const R = 30;
 const gEdges = el('g', {}, svg), gPulse = el('g', {}, svg), gNodes = el('g', {}, svg);
-[['input', 80], ['nascosto', 330], ['output', 580], ['loss', 730]].forEach(([t_, x]) => { const tx = el('text', { x, y: 22, class: 'collab' }, svg); tx.textContent = t_; });
-
+[['input x', 80], ['nascosto h⁽¹⁾', 330], ['output y', 580], ['loss', 730]].forEach(([t_, x]) => { const tx = el('text', { x, y: 22, class: 'collab' }, svg); tx.textContent = t_; });
+let POS, edges = [], nodes = [];
 function shorten(a, b, ra, rb){ const dx = b[0] - a[0], dy = b[1] - a[1], d = Math.hypot(dx, dy); return [a[0] + dx * ra / d, a[1] + dy * ra / d, b[0] - dx * rb / d, b[1] - dy * rb / d]; }
-const edges = [];
 function addEdge(e, a, b){
   const [x1, y1, x2, y2] = shorten(a, b, R, R + 2);
   const g = el('g', {}, gEdges);
@@ -504,11 +549,7 @@ function addEdge(e, a, b){
   if (e.l !== 3) e.hit.addEventListener('click', () => { S.sel = { t: 'edge', l: e.l, i: e.i, j: e.j }; render(); });
   edges.push(e);
 }
-for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) addEdge({ l: 1, i, j }, POS.in[j], POS.hid[i]);
-for (let k = 0; k < 2; k++) for (let i = 0; i < 3; i++) addEdge({ l: 2, i: k, j: i }, POS.hid[i], POS.out[k]);
-for (let k = 0; k < 2; k++) addEdge({ l: 3, i: 0, j: k }, POS.out[k], POS.loss);
-
-const nodes = [];
+const sub = (b, s) => `${b}<tspan baseline-shift="sub" font-size="9">${s}</tspan>`;
 function addNode(l, i, c, label, isLoss){
   const g = el('g', { class: 'node', tabindex: 0, role: 'button' }, gNodes);
   const n = { l, i, g };
@@ -523,11 +564,19 @@ function addNode(l, i, c, label, isLoss){
   g.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); pick(); } });
   nodes.push(n);
 }
-const sub = (b, s) => `${b}<tspan baseline-shift="sub" font-size="9">${s}</tspan>`;
-POS.in.forEach((c, j) => addNode(0, j, c, sub('x', j + 1)));
-POS.hid.forEach((c, i) => addNode(1, i, c, sub('h', i + 1)));
-POS.out.forEach((c, k) => addNode(2, k, c, sub('ŷ', k + 1)));
-addNode(3, 0, POS.loss, '𝓛', true);
+function buildNet(){
+  gEdges.innerHTML = ''; gNodes.innerHTML = ''; gPulse.innerHTML = ''; edges = []; nodes = [];
+  POS = { in: [[80, 150], [80, 270]], hid: NH === 3 ? [[330, 90], [330, 210], [330, 330]] : [[330, 150], [330, 270]], out: [[580, 150], [580, 270]], loss: [730, 210] };
+  for (let i = 0; i < NH; i++) for (let j = 0; j < 2; j++) addEdge({ l: 1, i, j }, POS.in[j], POS.hid[i]);
+  for (let k = 0; k < 2; k++) for (let i = 0; i < NH; i++) addEdge({ l: 2, i: k, j: i }, POS.hid[i], POS.out[k]);
+  for (let k = 0; k < 2; k++) addEdge({ l: 3, i: 0, j: k }, POS.out[k], POS.loss);
+  POS.in.forEach((c, j) => addNode(0, j, c, sub('x', j + 1)));
+  POS.hid.forEach((c, i) => addNode(1, i, c, sub('h', i + 1)));
+  POS.out.forEach((c, k) => addNode(2, k, c, sub('y', k + 1)));
+  addNode(3, 0, POS.loss, '𝓛', true);
+  if (S.sel.t === 'node' && S.sel.l === 1 && S.sel.i >= NH) S.sel = { t: 'node', l: 1, i: 0 };
+  if (S.sel.t === 'edge' && ((S.sel.l === 1 && S.sel.i >= NH) || (S.sel.l === 2 && S.sel.j >= NH))) S.sel = { t: 'node', l: 1, i: 0 };
+}
 
 /* pulses */
 let pulseRaf = null;
@@ -538,8 +587,7 @@ function pulses(layer, dir){
   const dots = es.map(e => ({ e, c: el('circle', { r: 4.5, class: dir > 0 ? 'pulse-f' : 'pulse-b' }, gPulse) }));
   const t0 = performance.now(), dur = 650;
   const tick = now => {
-    let u = Math.min(1, (now - t0) / dur); const s = dir > 0 ? u : 1 - u;
-    const ease = s * s * (3 - 2 * s);
+    const u = Math.min(1, (now - t0) / dur), s = dir > 0 ? u : 1 - u, ease = s * s * (3 - 2 * s);
     dots.forEach(({ e, c }) => { c.setAttribute('cx', e.p[0] + (e.p[2] - e.p[0]) * ease); c.setAttribute('cy', e.p[1] + (e.p[3] - e.p[1]) * ease); c.setAttribute('opacity', u < .85 ? 1 : (1 - u) / .15); });
     if (u < 1) pulseRaf = requestAnimationFrame(tick); else gPulse.innerHTML = '';
   };
@@ -555,13 +603,13 @@ function edgeMode(l, s){
 function render(){
   const s = S.step, Ps = s === 8 ? Pnew : P;
   const maxG1 = Math.max(1e-9, ...G.gW1.flat().map(Math.abs)), maxG2 = Math.max(1e-9, ...G.gW2.flat().map(Math.abs));
-  const maxE = Math.max(1e-9, ...C.a2.map((a, k) => Math.abs(a - S.y[k])));
+  const maxE = Math.max(1e-9, ...G.gy.map(Math.abs));
   edges.forEach(e => {
     const mode = edgeMode(e.l, s);
     let w = 0, g = 0, width, tip;
-    if (e.l === 1) { w = Ps.W1[e.i][e.j]; g = G.gW1[e.i][e.j]; tip = `w(1)${e.i + 1}${e.j + 1} = ${h(w)}   ∂L/∂w = ${h(g)}`; }
-    else if (e.l === 2) { w = Ps.W2[e.i][e.j]; g = G.gW2[e.i][e.j]; tip = `w(2)${e.i + 1}${e.j + 1} = ${h(w)}   ∂L/∂w = ${h(g)}`; }
-    else { g = C.a2[e.j] - S.y[e.j]; tip = `∂L/∂ŷ${e.j + 1} = ŷ − y = ${h(g)}`; }
+    if (e.l === 1) { w = Ps.W1[e.i][e.j]; g = G.gW1[e.i][e.j]; tip = `W(1)${e.i + 1}${e.j + 1} = ${h(w)}   ∂L/∂W = ${h(g)}`; }
+    else if (e.l === 2) { w = Ps.W2[e.i][e.j]; g = G.gW2[e.i][e.j]; tip = `W(2)${e.i + 1}${e.j + 1} = ${h(w)}   ∂L/∂W = ${h(g)}`; }
+    else { g = G.gy[e.j]; tip = `∂L/∂y${e.j + 1} = y − t = ${h(g)}`; }
     if (mode === 'bwd' || mode === 'bdone') width = e.l === 1 ? 1 + 6 * Math.abs(g) / maxG1 : e.l === 2 ? 1 + 6 * Math.abs(g) / maxG2 : 1 + 5 * Math.abs(g) / maxE;
     else width = e.l === 3 ? 2 : 0.8 + 3.2 * Math.min(Math.abs(w) / 1.5, 1);
     const isSel = S.sel.t === 'edge' && S.sel.l === e.l && S.sel.i === e.i && S.sel.j === e.j;
@@ -575,18 +623,18 @@ function render(){
     let cls = 'node', val = '?', s1 = '', s2 = '', s1c = 'm', s2c = 'd', known = false;
     if (n.l === 0) { known = true; val = h(S.x[n.i]); cls += ' done'; s1 = 'input'; }
     if (n.l === 1) {
-      known = s >= 1; if (known) { val = h(C.a1[n.i]); s1 = 'z = ' + h(C.z1[n.i]); s1c = 'z'; cls += ' done'; }
-      if (s >= 6) s2 = 'δ = ' + h(G.d1[n.i]);
+      known = s >= 1; if (known) { val = h(C.h1[n.i]); s1 = 'a = ' + h(C.a1[n.i]); s1c = 'z'; cls += ' done'; }
+      if (s >= 6) s2 = 'g = ' + h(G.g1[n.i]);
       if (s === 1) cls += ' act-f'; if (s === 6) cls += ' act-b';
     }
     if (n.l === 2) {
-      known = s >= 2; if (known) { val = h(C.a2[n.i]); s1 = 'z = ' + h(C.z2[n.i]); s1c = 'z'; cls += ' done'; }
-      if (s >= 4) s2 = 'δ = ' + h(G.d2[n.i]);
+      known = s >= 2; if (known) { val = h(C.y[n.i]); s1 = 'a = ' + h(C.a2[n.i]); s1c = 'z'; cls += ' done'; }
+      if (s >= 4) s2 = 'g = ' + h(G.g2[n.i]);
       if (s === 2) cls += ' act-f'; if (s === 4) cls += ' act-b';
     }
     if (n.l === 3) {
       known = s >= 3; if (known) { val = h(s === 8 ? Cnew.L : C.L); cls += ' done'; }
-      s1 = `y = (${h(S.y[0])}, ${h(S.y[1])})`;
+      s1 = `t = (${h(S.t[0])}, ${h(S.t[1])})`;
       if (s === 8) { s2 = 'prima ' + h(C.L); s2c = 'm'; }
       if (s === 3) cls += ' act-f'; if (s === 4) cls += ' act-b';
     }
@@ -598,7 +646,7 @@ function render(){
   });
 
   [...chips.children].forEach((c, n) => { c.classList.toggle('cur', n === s); c.classList.toggle('past', n < s); c.setAttribute('aria-selected', n === s); });
-  $('prev').disabled = s === 0 && S.iter === 1;
+  $('prev').disabled = s === 0;
   $('iter').textContent = 'iterazione ' + S.iter;
   renderPanel(); renderInspector(); renderGC(); renderChart();
 }
@@ -609,83 +657,80 @@ function typeset(node){
   if (!window.__mjReady || !window.MathJax || !MathJax.typesetPromise) return;
   mjChain = mjChain.then(() => { MathJax.typesetClear([node]); return MathJax.typesetPromise([node]); }).catch(() => {});
 }
-window.__onMJ = () => { lastPanel = ''; renderPanel(); };
+window.__onMJ = () => { lastPanel = ''; renderPanel(); typeset(document.querySelector('.preset')); };
+function selIn(layer, n){ return S.sel.t === 'node' && S.sel.l === layer && S.sel.i < n ? S.sel.i : 0; }
 function panelHTML(){
-  const s = S.step, x = S.x, y = S.y, g1 = ACT[S.ha].tex, g2 = ACT[S.oa].tex;
-  const W1 = P.W1, b1 = P.b1, W2 = P.W2, b2 = P.b2;
+  const s = S.step, x = S.x, tt = S.t, g1 = ACT[S.ha].tex, g2 = ACT[S.oa].tex, a = S.lr.toFixed(2);
   const T = (tag, cls, title, body) => `<p class="tag ${cls}">${tag}</p><h2>${title}</h2>${body}`;
-  const M = tex => `<div class="math">$$${tex}$$</div>`;
   const B = (label, tex) => `<div class="calc"><span class="calc-l">${label}</span><div class="math">$$${tex}$$</div></div>`;
   const Bs = items => `<div class="calcs">${items.join('')}</div>`;
   const AL = rows => String.raw`\begin{aligned}` + rows.join(String.raw`\\[7pt]`) + String.raw`\end{aligned}`;
+  const W2T = RANGE(NH).map(i => [P.W2[0][i], P.W2[1][i]]);
   switch (s) {
     case 0: return T('Passo 0 · setup', 'u', 'Input e target',
-      `<p>La rete riceve l'esempio $x$ e deve avvicinare la sua uscita al target $y$. I pesi sono inizializzati a caso: muovi i cursori sotto la rete per cambiarli.</p>` +
-      M(String.raw`x = \begin{pmatrix}${t(x[0])}\\ ${t(x[1])}\end{pmatrix},\qquad y = \begin{pmatrix}${t(y[0])}\\ ${t(y[1])}\end{pmatrix}`) +
+      `<p>La rete riceve l'esempio $\\vx$ e deve avvicinare la predizione $\\vy$ al target $\\vt$. Muovi i cursori sotto la rete per cambiarli, oppure carica l'esercizio del corso.</p>` +
+      Bs([B('Esempio', String.raw`\vx = ${bv(x)},\qquad \vt = ${bv(tt)}`),
+          B('Parametri', String.raw`\vW^{(1)} = ${bm(P.W1)},\quad \vb^{(1)} = ${bv(P.b1)}`),
+          B('', String.raw`\vW^{(2)} = ${bm(P.W2)},\quad \vb^{(2)} = ${bv(P.b2)}`)]) +
       `<p>Premi <b>Avanti</b> (o la freccia →) per iniziare il forward pass.</p>`);
-    case 1: return T('Passo 1 · forward', 'f', 'Strato nascosto',
-      `<p>Ogni neurone nascosto fa una somma pesata degli input più il bias, poi applica l'attivazione: $z^{(1)} = W^{(1)}x + b^{(1)}$, $\;a^{(1)} = ${g1}(z^{(1)})$.</p>` +
-      Bs([0, 1, 2].map(i => B(`Neurone h${i + 1}`, AL([
-        String.raw`z^{(1)}_{${i + 1}} &= w^{(1)}_{${i + 1}1}x_1 + w^{(1)}_{${i + 1}2}x_2 + b^{(1)}_{${i + 1}}`,
-        String.raw`&= ${p(W1[i][0])}\cdot${p(x[0])} + ${p(W1[i][1])}\cdot${p(x[1])} + ${p(b1[i])}`,
-        String.raw`&= ${t(C.z1[i])}`,
-        String.raw`a^{(1)}_{${i + 1}} &= ${g1}(${t(C.z1[i])}) = \mathbf{${t(C.a1[i])}}`])))) +
-      `<p>I valori $z$ e $a$ vengono <b>memorizzati</b>: serviranno nel backward.</p>`);
-    case 2: return T('Passo 2 · forward', 'f', 'Strato di output',
-      `<p>Stessa operazione, con le attivazioni nascoste come input: $z^{(2)} = W^{(2)}a^{(1)} + b^{(2)}$, $\;\hat y = a^{(2)} = ${g2}(z^{(2)})$.</p>` +
-      Bs([0, 1].map(k => B(`Neurone ŷ${k + 1}`, AL([
-        String.raw`z^{(2)}_{${k + 1}} &= \textstyle\sum_{i} w^{(2)}_{${k + 1}i}\,a^{(1)}_i + b^{(2)}_{${k + 1}}`,
-        String.raw`&= ${p(W2[k][0])}\cdot${p(C.a1[0])} + ${p(W2[k][1])}\cdot${p(C.a1[1])}`,
-        String.raw`&\quad + ${p(W2[k][2])}\cdot${p(C.a1[2])} + ${p(b2[k])}`,
-        String.raw`&= ${t(C.z2[k])}`,
-        String.raw`\hat y_{${k + 1}} &= ${g2}(${t(C.z2[k])}) = \mathbf{${t(C.a2[k])}}`])))));
-    case 3: return T('Passo 3 · forward', 'f', 'Loss',
-      `<p>Confrontiamo l'uscita con il target con l'errore quadratico. Questo è l'unico numero che vogliamo ridurre.</p>` +
+    case 1: { const i = selIn(1, NH); return T('Passo 1 · forward, k = 1 · righe 3–4', 'f', 'Layer nascosto',
+      `<p>Pre-attivazione e attivazione del layer 1: $\\va^{(1)} = \\vW^{(1)}\\vx + \\vb^{(1)}$, $\\;\\vh^{(1)} = ${g1}(\\va^{(1)})$.</p>` +
+      Bs([B('Pre-attivazione', String.raw`\va^{(1)} = ${bm(P.W1)}${bv(x)} + ${bv(P.b1)} = ${bv(C.a1)}`),
+          B('Attivazione', String.raw`\vh^{(1)} = ${g1}\big(\va^{(1)}\big) = ${bv(C.h1)}`),
+          B(`Componente: unità h${i + 1}`, AL([
+            String.raw`a^{(1)}_{${i + 1}} &= W^{(1)}_{${i + 1}1}x_1 + W^{(1)}_{${i + 1}2}x_2 + b^{(1)}_{${i + 1}}`,
+            String.raw`&= ${p(P.W1[i][0])}\cdot${p(x[0])} + ${p(P.W1[i][1])}\cdot${p(x[1])} + ${p(P.b1[i])} = ${t(C.a1[i])}`,
+            String.raw`h^{(1)}_{${i + 1}} &= ${g1}(${t(C.a1[i])}) = \mathbf{${t(C.h1[i])}}`]))]) +
+      `<p>$\\va^{(1)}$ e $\\vh^{(1)}$ vengono <b>memorizzati</b>: serviranno nel backward. Clicca un'altra unità per vederne il calcolo.</p>`); }
+    case 2: { const k = selIn(2, 2); return T('Passo 2 · forward, k = 2 · righe 3–6', 'f', 'Layer di output',
+      `<p>Stessa operazione, con $\\vh^{(1)}$ come input: $\\va^{(2)} = \\vW^{(2)}\\vh^{(1)} + \\vb^{(2)}$, $\\;\\vy = \\vh^{(2)} = ${g2}(\\va^{(2)})$.</p>` +
+      Bs([B('Pre-attivazione', String.raw`\va^{(2)} = ${bm(P.W2)}${bv(C.h1)} + ${bv(P.b2)} = ${bv(C.a2)}`),
+          B('Output', String.raw`\vy = \vh^{(2)} = ${g2}\big(\va^{(2)}\big) = ${bv(C.y)}`),
+          B(`Componente: unità y${k + 1}`, AL([
+            String.raw`a^{(2)}_{${k + 1}} &= \textstyle\sum_{j} W^{(2)}_{${k + 1}j}\,h^{(1)}_j + b^{(2)}_{${k + 1}}`,
+            String.raw`&= ` + RANGE(NH).map(j => String.raw`${p(P.W2[k][j])}\cdot${p(C.h1[j])}`).join(' + ') + String.raw` + ${p(P.b2[k])}`,
+            String.raw`&= ${t(C.a2[k])}`,
+            String.raw`y_{${k + 1}} &= ${g2}(${t(C.a2[k])}) = \mathbf{${t(C.y[k])}}`]))])); }
+    case 3: return T('Passo 3 · forward · riga 7', 'f', 'Loss',
+      `<p>Confrontiamo la predizione con il target. Questo è l'unico numero che vogliamo ridurre.</p>` +
       Bs([B('Errore quadratico', AL([
-        String.raw`\mathcal L &= \tfrac12\big[(\hat y_1 - y_1)^2 + (\hat y_2 - y_2)^2\big]`,
-        String.raw`&= \tfrac12\big[(${t(C.a2[0])} - ${t(y[0])})^2 + (${t(C.a2[1])} - ${t(y[1])})^2\big]`,
-        String.raw`&= \mathbf{${C.L.toFixed(4)}}`]))]) +
-      `<p>Da qui parte il backward: vogliamo sapere come cambia $\\mathcal L$ muovendo ciascuno dei 17 parametri.</p>`);
-    case 4: return T('Passo 4 · backward · <a href="#bp1">BP1</a>', 'b', 'Errore dello strato di output',
-      `<p>Derivata della loss rispetto a $\\hat y$, moltiplicata per la derivata dell'attivazione nel punto $z^{(2)}$ salvato: $\\delta^{(2)}_k = (\\hat y_k - y_k)\\,${g2}'(z^{(2)}_k)$.</p>` +
-      Bs([0, 1].map(k => B(`Neurone ŷ${k + 1}`, AL([
-        String.raw`\delta^{(2)}_{${k + 1}} &= (\hat y_{${k + 1}} - y_{${k + 1}})\cdot ${g2}'(z^{(2)}_{${k + 1}})`,
-        String.raw`&= (${t(C.a2[k])} - ${t(y[k])})\cdot ${t(G.dz2[k])}`,
-        String.raw`&= \mathbf{${t(G.d2[k])}}`])))) +
-      (S.oa === 'sigmoid' ? `<p>Qui $\\sigma'(z) = \\hat y(1-\\hat y)$. Se l'output è saturo (vicino a 0 o 1) questo fattore è piccolo e il gradiente si attenua.</p>` : `<p>Con output lineare $\\mathrm{id}'(z) = 1$, quindi $\\delta^{(2)} = \\hat y - y$.</p>`));
-    case 5: return T('Passo 5 · backward · <a href="#bp4">BP4</a>, <a href="#bp3">BP3</a>', 'b', 'Gradienti di W⁽²⁾ e b⁽²⁾',
-      `<p>Il gradiente di ogni peso è l'errore del neurone di arrivo per l'attivazione del neurone di partenza. In forma matriciale è un prodotto esterno.</p>` +
-      Bs([
-        B('Prodotto esterno', String.raw`\frac{\partial\mathcal L}{\partial W^{(2)}} = \delta^{(2)}\big(a^{(1)}\big)^{\!\top} = \begin{pmatrix}${t(G.d2[0])}\\ ${t(G.d2[1])}\end{pmatrix}\begin{pmatrix}${t(C.a1[0])} & ${t(C.a1[1])} & ${t(C.a1[2])}\end{pmatrix}`),
-        B('Risultato (2 × 3, come W⁽²⁾)', String.raw`\frac{\partial\mathcal L}{\partial W^{(2)}} = \begin{pmatrix}${G.gW2[0].map(t).join(' & ')}\\[3pt] ${G.gW2[1].map(t).join(' & ')}\end{pmatrix}`),
-        B('Esempio: un singolo peso', String.raw`\frac{\partial\mathcal L}{\partial w^{(2)}_{11}} = \delta^{(2)}_1\,a^{(1)}_1 = ${p(G.d2[0])}\cdot${p(C.a1[0])} = ${t(G.gW2[0][0])}`),
-        B('Bias', String.raw`\frac{\partial\mathcal L}{\partial b^{(2)}} = \delta^{(2)} = \begin{pmatrix}${t(G.d2[0])}\\ ${t(G.d2[1])}\end{pmatrix}`)]) +
-      `<p>Lo spessore degli archi arancioni è proporzionale a $|\\partial\\mathcal L/\\partial w|$.</p>`);
-    case 6: return T('Passo 6 · backward · <a href="#bp2">BP2</a>', 'b', 'Errore dello strato nascosto',
-      `<p>L'errore torna indietro lungo gli stessi archi, pesato dagli stessi pesi (cioè con $W^{(2)\\top}$), poi viene moltiplicato per $${g1}'(z^{(1)})$.</p>` +
-      Bs([0, 1, 2].map(i => B(`Neurone h${i + 1}`, AL([
-        String.raw`\delta^{(1)}_{${i + 1}} &= \big(w^{(2)}_{1${i + 1}}\delta^{(2)}_1 + w^{(2)}_{2${i + 1}}\delta^{(2)}_2\big)\cdot ${g1}'(z^{(1)}_{${i + 1}})`,
-        String.raw`&= \big(${p(W2[0][i])}\cdot${p(G.d2[0])} + ${p(W2[1][i])}\cdot${p(G.d2[1])}\big)\cdot ${t(G.dz1[i])}`,
-        String.raw`&= ${p(G.back[i])}\cdot${t(G.dz1[i])}`,
-        String.raw`&= \mathbf{${t(G.d1[i])}}`])))) +
-      `<p>Si usano i pesi <b>vecchi</b> $W^{(2)}$: l'aggiornamento avviene solo dopo aver calcolato tutti i gradienti.</p>`);
-    case 7: return T('Passo 7 · backward · <a href="#bp4">BP4</a>, <a href="#bp3">BP3</a>', 'b', 'Gradienti di W⁽¹⁾ e b⁽¹⁾',
-      `<p>Come al passo 5, ma con $\\delta^{(1)}$ e l'input $x$ come attivazione di partenza.</p>` +
-      Bs([
-        B('Prodotto esterno', String.raw`\frac{\partial\mathcal L}{\partial W^{(1)}} = \delta^{(1)}x^{\top} = \begin{pmatrix}${t(G.d1[0])}\\ ${t(G.d1[1])}\\ ${t(G.d1[2])}\end{pmatrix}\begin{pmatrix}${t(x[0])} & ${t(x[1])}\end{pmatrix}`),
-        B('Risultato (3 × 2, come W⁽¹⁾)', String.raw`\frac{\partial\mathcal L}{\partial W^{(1)}} = \begin{pmatrix}${G.gW1.map(rw => rw.map(t).join(' & ')).join(String.raw`\\[3pt] `)}\end{pmatrix}`),
-        B('Esempio: un singolo peso', String.raw`\frac{\partial\mathcal L}{\partial w^{(1)}_{11}} = \delta^{(1)}_1\,x_1 = ${p(G.d1[0])}\cdot${p(x[0])} = ${t(G.gW1[0][0])}`),
-        B('Bias', String.raw`\frac{\partial\mathcal L}{\partial b^{(1)}} = \delta^{(1)} = \begin{pmatrix}${t(G.d1[0])}\\ ${t(G.d1[1])}\\ ${t(G.d1[2])}\end{pmatrix}`)]) +
-      `<p>Ora abbiamo tutti i 17 gradienti, calcolati con un solo passaggio all'indietro.</p>`);
+        String.raw`\mathcal L &= \tfrac12\,\|\vy - \vt\|_2^2 = \tfrac12\,\left\|${bv(G.gy)}\right\|_2^2`,
+        String.raw`&= \tfrac12\big[(${p(G.gy[0])})^2 + (${p(G.gy[1])})^2\big] = \mathbf{${t(C.L)}}`]))]) +
+      `<p>Da qui parte il backward: vogliamo sapere come cambia $\\mathcal L$ muovendo ciascun parametro.</p>`);
+    case 4: return T('Passo 4 · backward, k = 2 · righe 1 e 3', 'b', 'Gradiente rispetto ad a⁽²⁾',
+      `<p>Si inizializza $\\vg$ con il gradiente della loss rispetto all'output, poi lo si moltiplica per la derivata dell'attivazione, calcolata dai valori salvati nel forward.</p>` +
+      Bs([B('Riga 1 · inizializzazione', String.raw`\vg \leftarrow \frac{\partial\mathcal L}{\partial\vy} = \vy - \vt = ${bv(C.y)} - ${bv(tt)} = ${bv(G.gy)}`),
+          B('Derivata dell\'attivazione', String.raw`${g2}'\big(\va^{(2)}\big) = ${ACT[S.oa].dtex()} = ${bv(G.dphi2)}`),
+          B('Riga 3 · gradiente rispetto alla pre-attivazione', String.raw`\vg \leftarrow \frac{\partial\mathcal L}{\partial\va^{(2)}} = \vg\odot ${g2}'\big(\va^{(2)}\big) = ${bv(G.gy)}\odot${bv(G.dphi2)} = ${bv(G.g2)}`)]) +
+      (S.oa === 'sigmoid' ? `<p>Qui $\\sigma'(\\va^{(2)}) = \\vy\\odot(1-\\vy)$ (con $\\vh^{(2)} = \\vy$). Se un'uscita è satura, vicina a 0 o a 1, questo fattore è piccolo e il gradiente si attenua.</p>` : `<p>Con output lineare la derivata vale $1$, quindi $\\vg = \\vy - \\vt$.</p>`));
+    case 5: return T('Passo 5 · backward, k = 2 · righe 4–5', 'b', 'Gradienti di W⁽²⁾ e b⁽²⁾',
+      `<p>Ora $\\vg = \\partial\\mathcal L/\\partial\\va^{(2)}$. Il gradiente di ogni peso è $g_i$ dell'unità di arrivo per l'attivazione dell'unità di partenza: in forma matriciale è un prodotto esterno.</p>` +
+      Bs([B('Riga 4 · prodotto esterno', String.raw`\frac{\partial\mathcal L}{\partial\vW^{(2)}} = \vg\,\vh^{(1)T} = ${bv(G.g2)}${brow(C.h1)} = ${bm(G.gW2)}`),
+          B('Riga 5 · bias', String.raw`\frac{\partial\mathcal L}{\partial\vb^{(2)}} = \vg = ${bv(G.g2)}`),
+          B('Esempio: un singolo peso', String.raw`\frac{\partial\mathcal L}{\partial W^{(2)}_{11}} = g_1\,h^{(1)}_1 = ${p(G.g2[0])}\cdot${p(C.h1[0])} = ${t(G.gW2[0][0])}`)]) +
+      `<p>Lo spessore degli archi arancioni è proporzionale a $|\\partial\\mathcal L/\\partial W_{ij}|$.</p>`);
+    case 6: { const j = selIn(1, NH); return T('Passo 6 · backward · riga 6, poi riga 3 con k = 1', 'b', 'Gradiente rispetto ad a⁽¹⁾',
+      `<p>Il gradiente torna indietro lungo gli stessi archi, pesato dagli stessi pesi, cioè con $\\vW^{(2)T}$. Poi si moltiplica per $${g1}'(\\va^{(1)})$.</p>` +
+      Bs([B('Riga 6 · propaga il gradiente', String.raw`\vg \leftarrow \frac{\partial\mathcal L}{\partial\vh^{(1)}} = \vW^{(2)T}\vg = ${bm(W2T)}${bv(G.g2)} = ${bv(G.gh1)}`),
+          B(`Componente: unità h${j + 1}`, String.raw`\frac{\partial\mathcal L}{\partial h^{(1)}_{${j + 1}}} = \textstyle\sum_i W^{(2)}_{i${j + 1}}\,g_i = ${p(P.W2[0][j])}\cdot${p(G.g2[0])} + ${p(P.W2[1][j])}\cdot${p(G.g2[1])} = ${t(G.gh1[j])}`),
+          B('Riga 3 (k = 1)', String.raw`\vg \leftarrow \frac{\partial\mathcal L}{\partial\va^{(1)}} = \vg\odot ${g1}'\big(\va^{(1)}\big) = ${bv(G.gh1)}\odot${bv(G.dphi1)} = ${bv(G.g1)}`)]) +
+      `<p>${S.ha === 'sigmoid' ? 'Con la logistica $\\sigma\'(\\va^{(1)}) = \\vh^{(1)}\\odot(1-\\vh^{(1)})$. ' : ''}La riga 6 usa i pesi <b>vecchi</b> $\\vW^{(2)}$: l'aggiornamento avviene solo dopo aver calcolato tutti i gradienti.</p>`); }
+    case 7: return T('Passo 7 · backward, k = 1 · righe 4–5', 'b', 'Gradienti di W⁽¹⁾ e b⁽¹⁾',
+      `<p>Come al passo 5, con $\\vg = \\partial\\mathcal L/\\partial\\va^{(1)}$ e $\\vh^{(0)} = \\vx$ come attivazione di partenza.</p>` +
+      Bs([B('Riga 4 · prodotto esterno', String.raw`\frac{\partial\mathcal L}{\partial\vW^{(1)}} = \vg\,\vx^{T} = ${bv(G.g1)}${brow(x)} = ${bm(G.gW1)}`),
+          B('Riga 5 · bias', String.raw`\frac{\partial\mathcal L}{\partial\vb^{(1)}} = \vg = ${bv(G.g1)}`),
+          B('Esempio: un singolo peso', String.raw`\frac{\partial\mathcal L}{\partial W^{(1)}_{11}} = g_1\,x_1 = ${p(G.g1[0])}\cdot${p(x[0])} = ${t(G.gW1[0][0])}`)]) +
+      `<p>La riga 6 non serve per $k = 1$, perché $\\vx$ non è un parametro. Ora abbiamo tutti i gradienti, calcolati con un solo passaggio all'indietro.</p>`);
     case 8: {
       const dL = Cnew.L - C.L;
-      return T('Passo 8 · aggiornamento', 'u', 'Discesa del gradiente',
-      `<p>Ogni parametro si sposta nella direzione opposta al suo gradiente, di un passo $\\eta = ${S.lr.toFixed(2)}$: $\\;\\theta \\leftarrow \\theta - \\eta\\,\\nabla_\\theta\\mathcal L$. Due esempi:</p>` +
-      Bs([
-        B('Peso w⁽²⁾₁₁', AL([String.raw`w^{(2)}_{11} &\leftarrow w^{(2)}_{11} - \eta\,\frac{\partial\mathcal L}{\partial w^{(2)}_{11}}`, String.raw`&= ${t(P.W2[0][0])} - ${S.lr.toFixed(2)}\cdot${p(G.gW2[0][0])}`, String.raw`&= \mathbf{${t(Pnew.W2[0][0])}}`])),
-        B('Peso w⁽¹⁾₁₁', AL([String.raw`w^{(1)}_{11} &\leftarrow w^{(1)}_{11} - \eta\,\frac{\partial\mathcal L}{\partial w^{(1)}_{11}}`, String.raw`&= ${t(P.W1[0][0])} - ${S.lr.toFixed(2)}\cdot${p(G.gW1[0][0])}`, String.raw`&= \mathbf{${t(Pnew.W1[0][0])}}`])),
-        B('Loss prima e dopo', String.raw`\mathcal L:\ ${C.L.toFixed(4)}\ \longrightarrow\ \mathbf{${Cnew.L.toFixed(4)}}`)]) +
-      `<p>${dL < 0 ? 'La loss è scesa.' : 'La loss è salita: il learning rate è troppo grande per questo punto. Prova a ridurre η.'} Premi <b>Avanti</b> per ripartire dal forward con i pesi nuovi.</p>`);
+      return T('Passo 8 · aggiornamento SGD', 'u', 'Discesa del gradiente',
+      `<p>Ogni parametro si sposta nella direzione opposta al suo gradiente: $\\;\\vth \\leftarrow \\vth - \\alpha\\,\\dfrac{\\partial\\mathcal L}{\\partial\\vth}$, con $\\alpha = ${a}$.</p>` +
+      Bs([B('Layer 2', String.raw`\vW^{(2)} \leftarrow ${bm(P.W2)} - ${a}\cdot${bm(G.gW2)} = ${bm(Pnew.W2)}`),
+          B('', String.raw`\vb^{(2)} \leftarrow ${bv(P.b2)} - ${a}\cdot${bv(G.gb2)} = ${bv(Pnew.b2)}`),
+          B('Layer 1', String.raw`\vW^{(1)} \leftarrow ${bm(P.W1)} - ${a}\cdot${bm(G.gW1)} = ${bm(Pnew.W1)}`),
+          B('', String.raw`\vb^{(1)} \leftarrow ${bv(P.b1)} - ${a}\cdot${bv(G.gb1)} = ${bv(Pnew.b1)}`),
+          B('Nuovo forward pass', String.raw`\vy:\ ${bv(C.y)}\ \longrightarrow\ ${bv(Cnew.y)},\qquad \mathcal L:\ ${t(C.L)}\ \longrightarrow\ \mathbf{${t(Cnew.L)}}`)]) +
+      `<p>${dL < 0 ? 'La loss è scesa.' : 'La loss è salita: il learning rate è troppo grande per questo punto. Prova a ridurre α.'} Premi <b>Avanti</b> per ripartire dal forward con i pesi nuovi.</p>`);
     }
   }
 }
@@ -699,61 +744,62 @@ function renderPanel(){
 /* ---------------- ispettore ---------------- */
 function kv(rows){ return '<dl class="kv">' + rows.map(([k, v, c]) => `<dt>${k}</dt><dd class="${c || ''}">${v}</dd>`).join('') + '</dl>'; }
 const pend = n => `<span class="pend">al passo ${n}</span>`;
+const SUP = (b, k, i) => `${b}<sup>(${k})</sup><sub>${i}</sub>`;
 function renderInspector(){
-  const s = S.step, sel = S.sel, a1n = S.ha, out = [];
+  const s = S.step, sel = S.sel;
   let who = '', rows = [];
   if (sel.t === 'node') {
-    if (sel.l === 0) { who = `Input x<sub>${sel.i + 1}</sub>`; rows = [['valore', h(S.x[sel.i]), 'f'], ['ruolo', 'fa da a<sup>(0)</sup> nel calcolo dei gradienti di W<sup>(1)</sup>']]; }
+    if (sel.l === 0) { who = `Input x<sub>${sel.i + 1}</sub>`; rows = [['valore', h(S.x[sel.i]), 'f'], ['ruolo', 'è h<sup>(0)</sup>: entra nei gradienti di W<sup>(1)</sup>']]; }
     if (sel.l === 1) {
-      const i = sel.i; who = `Neurone nascosto h<sub>${i + 1}</sub>`;
+      const i = sel.i, n = i + 1; who = `Unità nascosta h<sub>${n}</sub>`;
       rows = [
-        ['z<sup>(1)</sup>', s >= 1 ? h(C.z1[i]) : pend(1), 'f'],
-        ['a<sup>(1)</sup>', s >= 1 ? h(C.a1[i]) : pend(1), 'f'],
-        ["σ′(z)", s >= 6 ? h(G.dz1[i]) : pend(6), 'b'],
-        ['Σ<sub>k</sub> w<sub>k' + (i + 1) + '</sub>δ<sub>k</sub>', s >= 6 ? h(G.back[i]) : pend(6), 'b'],
-        ['δ<sup>(1)</sup> = ∂𝓛/∂z', s >= 6 ? h(G.d1[i]) : pend(6), 'b'],
-        ['b<sup>(1)</sup>', h(P.b1[i]) + (s === 8 ? ' → ' + h(Pnew.b1[i]) : '')],
+        [SUP('a', 1, n), s >= 1 ? h(C.a1[i]) : pend(1), 'f'],
+        [SUP('h', 1, n), s >= 1 ? h(C.h1[i]) : pend(1), 'f'],
+        [`∂𝓛/∂${SUP('h', 1, n)} = Σ<sub>i</sub> W<sub>i${n}</sub>g<sub>i</sub>`, s >= 6 ? h(G.gh1[i]) : pend(6), 'b'],
+        [`φ′(${SUP('a', 1, n)})`, s >= 6 ? h(G.dphi1[i]) : pend(6), 'b'],
+        [`g<sub>${n}</sub> = ∂𝓛/∂${SUP('a', 1, n)}`, s >= 6 ? h(G.g1[i]) : pend(6), 'b'],
+        [SUP('b', 1, n), h(P.b1[i]) + (s === 8 ? ' → ' + h(Pnew.b1[i]) : '')],
         ['∂𝓛/∂b', s >= 7 ? h(G.gb1[i]) : pend(7), 'b']
       ];
     }
     if (sel.l === 2) {
-      const k = sel.i; who = `Neurone di output ŷ<sub>${k + 1}</sub>`;
+      const k = sel.i, n = k + 1; who = `Unità di output y<sub>${n}</sub>`;
       rows = [
-        ['z<sup>(2)</sup>', s >= 2 ? h(C.z2[k]) : pend(2), 'f'],
-        ['ŷ = a<sup>(2)</sup>', s >= 2 ? h(C.a2[k]) : pend(2), 'f'],
-        ['target y', h(S.y[k])],
-        ['ŷ − y', s >= 4 ? h(C.a2[k] - S.y[k]) : pend(4), 'b'],
-        ["σ′(z)", s >= 4 ? h(G.dz2[k]) : pend(4), 'b'],
-        ['δ<sup>(2)</sup> = ∂𝓛/∂z', s >= 4 ? h(G.d2[k]) : pend(4), 'b'],
-        ['b<sup>(2)</sup>', h(P.b2[k]) + (s === 8 ? ' → ' + h(Pnew.b2[k]) : '')],
+        [SUP('a', 2, n), s >= 2 ? h(C.a2[k]) : pend(2), 'f'],
+        [`y<sub>${n}</sub> = ${SUP('h', 2, n)}`, s >= 2 ? h(C.y[k]) : pend(2), 'f'],
+        [`target t<sub>${n}</sub>`, h(S.t[k])],
+        [`∂𝓛/∂y<sub>${n}</sub> = y − t`, s >= 4 ? h(G.gy[k]) : pend(4), 'b'],
+        [`φ′(${SUP('a', 2, n)})`, s >= 4 ? h(G.dphi2[k]) : pend(4), 'b'],
+        [`g<sub>${n}</sub> = ∂𝓛/∂${SUP('a', 2, n)}`, s >= 4 ? h(G.g2[k]) : pend(4), 'b'],
+        [SUP('b', 2, n), h(P.b2[k]) + (s === 8 ? ' → ' + h(Pnew.b2[k]) : '')],
         ['∂𝓛/∂b', s >= 5 ? h(G.gb2[k]) : pend(5), 'b']
       ];
     }
-    if (sel.l === 3) { who = 'Loss 𝓛'; rows = [['𝓛', s >= 3 ? C.L.toFixed(4) : pend(3), 'f'], ['dopo l\'aggiornamento', s === 8 ? Cnew.L.toFixed(4) : pend(8)], ['∂𝓛/∂𝓛', '1 (punto di partenza del backward)', 'b']]; }
+    if (sel.l === 3) { who = 'Loss 𝓛 = ½‖y − t‖²'; rows = [['𝓛', s >= 3 ? h(C.L) : pend(3), 'f'], ['dopo l\'aggiornamento', s === 8 ? h(Cnew.L) : pend(8)], ['∂𝓛/∂y = y − t', s >= 4 ? `(${h(G.gy[0])}, ${h(G.gy[1])})` : pend(4), 'b']]; }
   } else {
     const { l, i, j } = sel;
     if (l === 1) {
-      who = `Peso w<sup>(1)</sup><sub>${i + 1}${j + 1}</sub> &nbsp;<span style="font-size:14px;color:var(--muted)">x<sub>${j + 1}</sub> → h<sub>${i + 1}</sub></span>`;
-      rows = [['w', h(P.W1[i][j]), 'f'], ['a di partenza = x<sub>' + (j + 1) + '</sub>', h(S.x[j]), 'f'], ['δ di arrivo = δ<sup>(1)</sup><sub>' + (i + 1) + '</sub>', s >= 6 ? h(G.d1[i]) : pend(6), 'b'],
-        ['∂𝓛/∂w = δ · a', s >= 7 ? `${h(G.d1[i])} × ${h(S.x[j])} = ${h(G.gW1[i][j])}` : pend(7), 'b'], ['w nuovo = w − η·∂𝓛/∂w', s === 8 ? h(Pnew.W1[i][j]) : pend(8)]];
+      who = `Peso ${SUP('W', 1, `${i + 1}${j + 1}`)} &nbsp;<span style="font-size:14px;color:var(--muted)">x<sub>${j + 1}</sub> → h<sub>${i + 1}</sub></span>`;
+      rows = [['W', h(P.W1[i][j]), 'f'], [`attivazione di partenza x<sub>${j + 1}</sub>`, h(S.x[j]), 'f'], [`g<sub>${i + 1}</sub> = ∂𝓛/∂${SUP('a', 1, i + 1)}`, s >= 6 ? h(G.g1[i]) : pend(6), 'b'],
+        ['∂𝓛/∂W = g<sub>i</sub> · x<sub>j</sub>', s >= 7 ? `${h(G.g1[i])} × ${h(S.x[j])} = ${h(G.gW1[i][j])}` : pend(7), 'b'], ['W − α·∂𝓛/∂W', s === 8 ? h(Pnew.W1[i][j]) : pend(8)]];
     } else {
-      who = `Peso w<sup>(2)</sup><sub>${i + 1}${j + 1}</sub> &nbsp;<span style="font-size:14px;color:var(--muted)">h<sub>${j + 1}</sub> → ŷ<sub>${i + 1}</sub></span>`;
-      rows = [['w', h(P.W2[i][j]), 'f'], ['a di partenza = a<sup>(1)</sup><sub>' + (j + 1) + '</sub>', s >= 1 ? h(C.a1[j]) : pend(1), 'f'], ['δ di arrivo = δ<sup>(2)</sup><sub>' + (i + 1) + '</sub>', s >= 4 ? h(G.d2[i]) : pend(4), 'b'],
-        ['∂𝓛/∂w = δ · a', s >= 5 ? `${h(G.d2[i])} × ${h(C.a1[j])} = ${h(G.gW2[i][j])}` : pend(5), 'b'], ['w nuovo = w − η·∂𝓛/∂w', s === 8 ? h(Pnew.W2[i][j]) : pend(8)]];
+      who = `Peso ${SUP('W', 2, `${i + 1}${j + 1}`)} &nbsp;<span style="font-size:14px;color:var(--muted)">h<sub>${j + 1}</sub> → y<sub>${i + 1}</sub></span>`;
+      rows = [['W', h(P.W2[i][j]), 'f'], [`attivazione di partenza ${SUP('h', 1, j + 1)}`, s >= 1 ? h(C.h1[j]) : pend(1), 'f'], [`g<sub>${i + 1}</sub> = ∂𝓛/∂${SUP('a', 2, i + 1)}`, s >= 4 ? h(G.g2[i]) : pend(4), 'b'],
+        ['∂𝓛/∂W = g<sub>i</sub> · h<sub>j</sub>', s >= 5 ? `${h(G.g2[i])} × ${h(C.h1[j])} = ${h(G.gW2[i][j])}` : pend(5), 'b'], ['W − α·∂𝓛/∂W', s === 8 ? h(Pnew.W2[i][j]) : pend(8)]];
     }
   }
-  $('insp').innerHTML = `<h3>Ispeziona</h3><p class="who">${who}</p>${kv(rows)}<p class="hint">Clicca un neurone o un arco della rete per ispezionarlo.</p>`;
+  $('insp').innerHTML = `<h3>Ispeziona</h3><p class="who">${who}</p>${kv(rows)}<p class="hint">Clicca un'unità o un arco della rete per ispezionarlo.</p>`;
 }
 
 /* ---------------- verifica gradienti ---------------- */
 function renderGC(){
-  const th = flat(P), gb = flatG(G), eps = 1e-5;
+  const th = flat(P), gb = flatG(G), eps = 1e-5, names = pnames();
   const rows = th.map((_, k) => {
     const a = th.slice(), b = th.slice(); a[k] += eps; b[k] -= eps;
     const gn = (forward(unflat(a), S.x, S.ha, S.oa).L - forward(unflat(b), S.x, S.ha, S.oa).L) / (2 * eps);
     const re = Math.abs(gb[k] - gn) / Math.max(Math.abs(gb[k]) + Math.abs(gn), 1e-12);
     const exact = Math.abs(gb[k]) + Math.abs(gn) < 1e-12;
-    return `<tr><td>${PNAMES[k]}</td><td class="num">${gb[k].toExponential(5).replace('-', '−')}</td><td class="num">${gn.toExponential(5).replace('-', '−')}</td><td class="num ${exact || re < 1e-7 ? 'ok' : 'warn'}">${exact ? '0 (entrambi nulli)' : re.toExponential(1)}</td></tr>`;
+    return `<tr><td>${names[k]}</td><td class="num">${gb[k].toExponential(5).replace('-', '−')}</td><td class="num">${gn.toExponential(5).replace('-', '−')}</td><td class="num ${exact || re < 1e-7 ? 'ok' : 'warn'}">${exact ? '0 (entrambi nulli)' : re.toExponential(1)}</td></tr>`;
   });
   $('gc').tBodies[0].innerHTML = rows.join('');
 }
@@ -761,7 +807,7 @@ function renderGC(){
 /* ---------------- grafico loss ---------------- */
 function renderChart(){
   const svgc = $('chart'), H = S.hist.concat([C.L]);
-  const W = 320, Ht = 130, l = 40, rr = 10, tp = 10, bt = 22;
+  const W = 320, Ht = 130, l = 44, rr = 10, tp = 10, bt = 22;
   const max = Math.max(...H, 1e-6), n = Math.max(H.length - 1, 1);
   const X = i => l + (W - l - rr) * i / n, Y = v => tp + (Ht - tp - bt) * (1 - v / max);
   const pts = H.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(' ');
@@ -799,71 +845,82 @@ document.addEventListener('keydown', ev => {
 });
 
 /* ---------------- controlli ---------------- */
-function bindRange(id, fn){ const inp = $(id), o = $(id + 'o'); const upd = () => { o.textContent = h(+inp.value); fn(+inp.value); }; inp.addEventListener('input', () => { upd(); compute(); render(); }); o.textContent = h(+inp.value); }
+function setSlider(id, v){ $(id).value = v; $(id + 'o').textContent = id === 'lr' ? (+v).toFixed(2) : h(+v); }
+function bindRange(id, fn){ const inp = $(id); inp.addEventListener('input', () => { setSlider(id, +inp.value); fn(+inp.value); compute(); render(); }); setSlider(id, +inp.value); }
 bindRange('x1', v => S.x[0] = v); bindRange('x2', v => S.x[1] = v);
-bindRange('y1', v => S.y[0] = v); bindRange('y2', v => S.y[1] = v);
+bindRange('t1', v => S.t[0] = v); bindRange('t2', v => S.t[1] = v);
 bindRange('lr', v => S.lr = v);
-$('lro').textContent = S.lr.toFixed(2);
+function setTargetRange(){
+  ['t1', 't2'].forEach((id, k) => { const inp = $(id); if (S.oa === 'linear') { inp.min = -2; inp.max = 2; } else { inp.min = 0; inp.max = 1; } setSlider(id, Math.min(+inp.max, Math.max(+inp.min, S.t[k]))); S.t[k] = +inp.value; });
+}
 $('hact').addEventListener('change', e => { S.ha = e.target.value; compute(); render(); });
-$('oact').addEventListener('change', e => {
-  S.oa = e.target.value;
-  ['y1', 'y2'].forEach(id => { const inp = $(id); if (S.oa === 'linear') { inp.min = -2; inp.max = 2; } else { inp.min = 0; inp.max = 1; inp.value = Math.min(1, Math.max(0, +inp.value)); } S.y[id === 'y1' ? 0 : 1] = +inp.value; $(id + 'o').textContent = h(+inp.value); });
-  compute(); render();
+$('oact').addEventListener('change', e => { S.oa = e.target.value; setTargetRange(); compute(); render(); });
+function resetRun(){ stopPlay(); S.hist = []; S.iter = 1; compute(); goTo(0, false); }
+$('nh').addEventListener('change', e => { NH = +e.target.value; buildNet(); P = randomParams(); resetRun(); });
+$('rand').addEventListener('click', () => { rng = mulberry32((Math.random() * 1e9) | 0); P = randomParams(); resetRun(); });
+$('preset').addEventListener('click', () => {
+  NH = 2; $('nh').value = '2'; buildNet();
+  S.ha = 'sigmoid'; S.oa = 'sigmoid'; $('hact').value = 'sigmoid'; $('oact').value = 'sigmoid'; setTargetRange();
+  S.x = [0.5, 0.1]; S.t = [0.01, 0.99]; S.lr = 0.3;
+  setSlider('x1', 0.5); setSlider('x2', 0.1); setSlider('t1', 0.01); setSlider('t2', 0.99); setSlider('lr', 0.3);
+  P = { W1: [[0.15, 0.20], [0.25, 0.30]], b1: [0.35, 0.35], W2: [[0.40, 0.45], [0.50, 0.55]], b2: [0.6, 0.6] };
+  S.sel = { t: 'node', l: 1, i: 0 };
+  resetRun();
+  document.querySelector('.lab').scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
 });
-$('rand').addEventListener('click', () => { stopPlay(); rng = mulberry32((Math.random() * 1e9) | 0); P = randomParams(); S.hist = []; S.iter = 1; compute(); goTo(0, false); });
 let training = false;
 $('train').addEventListener('click', () => {
   if (training) return; stopPlay(); training = true; $('train').disabled = true;
   let left = 200;
+  if (S.step === 8) { S.hist.push(C.L); P = Pnew; S.iter++; }
   const tick = () => {
     for (let q = 0; q < 8 && left > 0; q++, left--) { compute(); S.hist.push(C.L); P = Pnew; S.iter++; }
     compute(); S.step = 3; render();
     if (left > 0) requestAnimationFrame(tick); else { training = false; $('train').disabled = false; }
   };
-  if (S.step === 8) { /* il passo 8 mostra un aggiornamento non ancora applicato: lo applichiamo */ S.hist.push(C.L); P = Pnew; S.iter++; }
   requestAnimationFrame(tick);
 });
 
 /* ---------------- demo regola della catena ---------------- */
 const chain = $('chain');
-const CP = { x: [60, 60], w: [60, 170], mul: [230, 115], b: [230, 215], add: [390, 160], sig: [545, 160], loss: [705, 160], y: [705, 245] };
-const chainEdges = [['x', 'mul'], ['w', 'mul'], ['mul', 'add'], ['b', 'add'], ['add', 'sig'], ['sig', 'loss'], ['y', 'loss']];
+const defs = el('defs', {}, chain); const mk = el('marker', { id: 'arr', viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, defs);
+el('path', { d: 'M0,0 L10,5 L0,10 z', style: 'fill:var(--edge)' }, mk);
+const CP = { x: [60, 60], w: [60, 170], mul: [230, 115], b: [230, 215], add: [390, 160], sig: [545, 160], loss: [705, 160], t: [705, 245] };
+const chainEdges = [['x', 'mul'], ['w', 'mul'], ['mul', 'add'], ['b', 'add'], ['add', 'sig'], ['sig', 'loss'], ['t', 'loss']];
 const BW = 64, BH = 36;
 chainEdges.forEach(([a, b]) => {
   const A = CP[a], B = CP[b], dx = B[0] - A[0], dy = B[1] - A[1];
-  const fa = Math.min(BW / 2 / Math.abs(dx || 1e-9), BH / 2 / Math.abs(dy || 1e-9)), fb = fa;
-  el('line', { class: 'dl', x1: A[0] + dx * fa, y1: A[1] + dy * fa, x2: B[0] - dx * fb, y2: B[1] - dy * fb, 'marker-end': 'url(#arr)' }, chain);
+  const fa = Math.min(BW / 2 / Math.abs(dx || 1e-9), BH / 2 / Math.abs(dy || 1e-9));
+  el('line', { class: 'dl', x1: A[0] + dx * fa, y1: A[1] + dy * fa, x2: B[0] - dx * fa, y2: B[1] - dy * fa, 'marker-end': 'url(#arr)' }, chain);
 });
-const defs = el('defs', {}, chain); const mk = el('marker', { id: 'arr', viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, defs);
-el('path', { d: 'M0,0 L10,5 L0,10 z', style: 'fill:var(--edge)' }, mk);
 const CN = {};
-[['x', 'x', 0], ['w', 'w', 0], ['b', 'b', 0], ['y', 'y', 0], ['mul', '×', 1], ['add', '+', 1], ['sig', 'σ', 1], ['loss', '½(·−y)²', 1]].forEach(([k, label, op]) => {
+[['x', 'x', 0], ['w', 'w', 0], ['b', 'b', 0], ['t', 't', 0], ['mul', '×', 1], ['add', '+', 1], ['sig', 'σ', 1], ['loss', '½(·−t)²', 1]].forEach(([k, label, op]) => {
   const g = el('g', { class: 'dn' + (op ? ' op' : '') }, chain), c = CP[k];
   const wdt = k === 'loss' ? 96 : BW;
   el('rect', { x: c[0] - wdt / 2, y: c[1] - BH / 2, width: wdt, height: BH, rx: op ? 18 : 6 }, g);
   const tx = el('text', { class: 'op', x: c[0], y: c[1] }, g); tx.textContent = label;
-  const nm = { mul: 'u', add: 'z', sig: 'a', loss: '𝓛' }[k];
+  const nm = { mul: 'u', add: 'a', sig: 'y', loss: '𝓛' }[k];
   CN[k] = { fv: el('text', { class: 'fv', x: c[0], y: c[1] - BH / 2 - 7 }, g), gv: el('text', { class: 'gv', x: c[0], y: c[1] + BH / 2 + 16 }, g), nm };
 });
 function renderChain(){
-  const x = +$('cx').value, w = +$('cw').value, b = +$('cb').value, y = +$('cy').value;
-  const u = w * x, z = u + b, a = sig(z), L = 0.5 * (a - y) ** 2;
-  const dLa = a - y, sp = a * (1 - a), dLz = dLa * sp, dLu = dLz, dLb = dLz, dLw = dLu * x, dLx = dLu * w;
+  const x = +$('cx').value, w = +$('cw').value, b = +$('cb').value, tg = +$('ct').value;
+  const u = w * x, a = u + b, y = sig(a), L = 0.5 * (y - tg) ** 2;
+  const dLy = y - tg, sp = y * (1 - y), dLa = dLy * sp, dLu = dLa, dLb = dLa, dLw = dLu * x, dLx = dLu * w;
   const set = (k, f, g) => { CN[k].fv.textContent = (CN[k].nm ? CN[k].nm + ' = ' : '') + f; CN[k].gv.textContent = g; };
-  set('x', h(x), '∂𝓛/∂x = ' + h(dLx)); set('w', h(w), '∂𝓛/∂w = ' + h(dLw)); set('b', h(b), '∂𝓛/∂b = ' + h(dLb)); set('y', h(y), '');
-  set('mul', h(u), '∂𝓛/∂u = ' + h(dLu)); set('add', h(z), '∂𝓛/∂z = ' + h(dLz)); set('sig', h(a), '∂𝓛/∂a = ' + h(dLa)); set('loss', L.toFixed(4), '∂𝓛/∂𝓛 = 1');
+  set('x', h(x), '∂𝓛/∂x = ' + h(dLx)); set('w', h(w), '∂𝓛/∂w = ' + h(dLw)); set('b', h(b), '∂𝓛/∂b = ' + h(dLb)); set('t', h(tg), '');
+  set('mul', h(u), '∂𝓛/∂u = ' + h(dLu)); set('add', h(a), '∂𝓛/∂a = ' + h(dLa)); set('sig', h(y), '∂𝓛/∂y = ' + h(dLy)); set('loss', h(L), '∂𝓛/∂𝓛 = 1');
   $('chainlist').innerHTML = [
-    `<li><span class="g">∂𝓛/∂a</span> = a − y <span class="l">=</span> ${h(a)} − ${h(y)} = <span class="g">${h(dLa)}</span></li>`,
-    `<li><span class="g">∂𝓛/∂z</span> = ∂𝓛/∂a · σ′(z) = ${h(dLa)} · ${h(sp)} = <span class="g">${h(dLz)}</span> <span class="l">  σ′(z) = a(1−a)</span></li>`,
-    `<li><span class="g">∂𝓛/∂b</span> = ∂𝓛/∂z · 1 = <span class="g">${h(dLb)}</span>,   <span class="g">∂𝓛/∂u</span> = ∂𝓛/∂z · 1 = <span class="g">${h(dLu)}</span> <span class="l">  il nodo + copia il gradiente</span></li>`,
+    `<li><span class="g">∂𝓛/∂y</span> = y − t = ${h(y)} − ${h(tg)} = <span class="g">${h(dLy)}</span></li>`,
+    `<li><span class="g">∂𝓛/∂a</span> = ∂𝓛/∂y · σ′(a) = ${h(dLy)} · ${h(sp)} = <span class="g">${h(dLa)}</span> <span class="l">  σ′(a) = y(1−y)</span></li>`,
+    `<li><span class="g">∂𝓛/∂b</span> = ∂𝓛/∂a · 1 = <span class="g">${h(dLb)}</span>,   <span class="g">∂𝓛/∂u</span> = ∂𝓛/∂a · 1 = <span class="g">${h(dLu)}</span> <span class="l">  il nodo + copia il gradiente</span></li>`,
     `<li><span class="g">∂𝓛/∂w</span> = ∂𝓛/∂u · x = ${h(dLu)} · ${h(x)} = <span class="g">${h(dLw)}</span>,   <span class="g">∂𝓛/∂x</span> = ∂𝓛/∂u · w = <span class="g">${h(dLx)}</span> <span class="l">  il nodo × scambia gli ingressi</span></li>`
   ].join('');
 }
-['cx', 'cw', 'cb', 'cy'].forEach(id => { const inp = $(id); const o = $(id + 'o'); const u = () => { o.textContent = h(+inp.value); renderChain(); }; inp.addEventListener('input', u); o.textContent = h(+inp.value); });
+['cx', 'cw', 'cb', 'ct'].forEach(id => { const inp = $(id), o = $(id + 'o'); const u = () => { o.textContent = h(+inp.value); renderChain(); }; inp.addEventListener('input', u); o.textContent = h(+inp.value); });
 renderChain();
 
 /* ---------------- avvio ---------------- */
-compute(); render();
+buildNet(); compute(); render();
 })();
 </script>
 </body>
