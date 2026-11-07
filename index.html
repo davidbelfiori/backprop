@@ -55,7 +55,7 @@ h1{font-family:var(--f-display); font-weight:700; font-size:clamp(30px, 5vw, 46p
 .k-bwd{color:var(--bwd); font-weight:600}
 
 /* ---------- LAB ---------- */
-.lab{display:grid; grid-template-columns:minmax(0,1.55fr) minmax(0,1fr); gap:16px; padding-block:12px 8px}
+.lab{display:grid; grid-template-columns:minmax(0,1.4fr) minmax(0,1.1fr); gap:16px; padding-block:12px 8px}
 @media (max-width: 920px){ .lab{grid-template-columns:minmax(0,1fr)} }
 .card{background:var(--surface); border:1px solid var(--rule); border-radius:10px; min-width:0}
 .netcard{display:flex; flex-direction:column}
@@ -113,7 +113,11 @@ button.btn:disabled{opacity:.45; cursor:default}
 .panel .tag.f{color:var(--fwd)} .panel .tag.b{color:var(--bwd)} .panel .tag.u{color:var(--muted)}
 .panel p{font-family:var(--f-body); font-size:15.5px; margin:8px 0}
 .panel a{color:inherit}
-.math{overflow-x:auto; overflow-y:hidden; font-size:14px; padding:2px 0}
+.math{overflow-x:auto; overflow-y:hidden; font-size:15.5px; padding:2px 0}
+.calcs{display:flex; flex-direction:column; gap:12px; margin:14px 0}
+.calc{border-top:1px solid var(--rule); padding-top:10px; min-width:0}
+.calc-l{display:block; font:600 11.5px var(--f-ui); letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin-bottom:2px}
+.calc mjx-container[display="true"]{margin:.4em 0 !important}
 mjx-container[display="true"]{overflow-x:auto; overflow-y:hidden; max-width:100%; padding:2px 0}
 .insp h3{font:600 12px var(--f-ui); letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin:0 0 8px}
 .insp .who{font-family:var(--f-display); font-size:18px; font-weight:600; margin:0 0 10px}
@@ -611,6 +615,9 @@ function panelHTML(){
   const W1 = P.W1, b1 = P.b1, W2 = P.W2, b2 = P.b2;
   const T = (tag, cls, title, body) => `<p class="tag ${cls}">${tag}</p><h2>${title}</h2>${body}`;
   const M = tex => `<div class="math">$$${tex}$$</div>`;
+  const B = (label, tex) => `<div class="calc"><span class="calc-l">${label}</span><div class="math">$$${tex}$$</div></div>`;
+  const Bs = items => `<div class="calcs">${items.join('')}</div>`;
+  const AL = rows => String.raw`\begin{aligned}` + rows.join(String.raw`\\[7pt]`) + String.raw`\end{aligned}`;
   switch (s) {
     case 0: return T('Passo 0 · setup', 'u', 'Input e target',
       `<p>La rete riceve l'esempio $x$ e deve avvicinare la sua uscita al target $y$. I pesi sono inizializzati a caso: muovi i cursori sotto la rete per cambiarli.</p>` +
@@ -618,39 +625,66 @@ function panelHTML(){
       `<p>Premi <b>Avanti</b> (o la freccia →) per iniziare il forward pass.</p>`);
     case 1: return T('Passo 1 · forward', 'f', 'Strato nascosto',
       `<p>Ogni neurone nascosto fa una somma pesata degli input più il bias, poi applica l'attivazione: $z^{(1)} = W^{(1)}x + b^{(1)}$, $\;a^{(1)} = ${g1}(z^{(1)})$.</p>` +
-      M(String.raw`\begin{aligned}` + [0, 1, 2].map(i => String.raw`z^{(1)}_{${i + 1}} &= ${p(W1[i][0])}\cdot${p(x[0])} + ${p(W1[i][1])}\cdot${p(x[1])} + ${p(b1[i])} = ${t(C.z1[i])} \\ a^{(1)}_{${i + 1}} &= ${g1}(${t(C.z1[i])}) = ${t(C.a1[i])}`).join(String.raw`\\[6pt]`) + String.raw`\end{aligned}`) +
+      Bs([0, 1, 2].map(i => B(`Neurone h${i + 1}`, AL([
+        String.raw`z^{(1)}_{${i + 1}} &= w^{(1)}_{${i + 1}1}x_1 + w^{(1)}_{${i + 1}2}x_2 + b^{(1)}_{${i + 1}}`,
+        String.raw`&= ${p(W1[i][0])}\cdot${p(x[0])} + ${p(W1[i][1])}\cdot${p(x[1])} + ${p(b1[i])}`,
+        String.raw`&= ${t(C.z1[i])}`,
+        String.raw`a^{(1)}_{${i + 1}} &= ${g1}(${t(C.z1[i])}) = \mathbf{${t(C.a1[i])}}`])))) +
       `<p>I valori $z$ e $a$ vengono <b>memorizzati</b>: serviranno nel backward.</p>`);
     case 2: return T('Passo 2 · forward', 'f', 'Strato di output',
       `<p>Stessa operazione, con le attivazioni nascoste come input: $z^{(2)} = W^{(2)}a^{(1)} + b^{(2)}$, $\;\hat y = a^{(2)} = ${g2}(z^{(2)})$.</p>` +
-      M(String.raw`\begin{aligned}` + [0, 1].map(k => String.raw`z^{(2)}_{${k + 1}} &= ${p(W2[k][0])}\cdot${p(C.a1[0])} + ${p(W2[k][1])}\cdot${p(C.a1[1])} + ${p(W2[k][2])}\cdot${p(C.a1[2])} + ${p(b2[k])} = ${t(C.z2[k])} \\ \hat y_{${k + 1}} &= ${g2}(${t(C.z2[k])}) = ${t(C.a2[k])}`).join(String.raw`\\[6pt]`) + String.raw`\end{aligned}`));
+      Bs([0, 1].map(k => B(`Neurone ŷ${k + 1}`, AL([
+        String.raw`z^{(2)}_{${k + 1}} &= \textstyle\sum_{i} w^{(2)}_{${k + 1}i}\,a^{(1)}_i + b^{(2)}_{${k + 1}}`,
+        String.raw`&= ${p(W2[k][0])}\cdot${p(C.a1[0])} + ${p(W2[k][1])}\cdot${p(C.a1[1])}`,
+        String.raw`&\quad + ${p(W2[k][2])}\cdot${p(C.a1[2])} + ${p(b2[k])}`,
+        String.raw`&= ${t(C.z2[k])}`,
+        String.raw`\hat y_{${k + 1}} &= ${g2}(${t(C.z2[k])}) = \mathbf{${t(C.a2[k])}}`])))));
     case 3: return T('Passo 3 · forward', 'f', 'Loss',
       `<p>Confrontiamo l'uscita con il target con l'errore quadratico. Questo è l'unico numero che vogliamo ridurre.</p>` +
-      M(String.raw`\mathcal L = \tfrac12\Big[(${t(C.a2[0])} - ${t(y[0])})^2 + (${t(C.a2[1])} - ${t(y[1])})^2\Big] = ${C.L.toFixed(4)}`) +
+      Bs([B('Errore quadratico', AL([
+        String.raw`\mathcal L &= \tfrac12\big[(\hat y_1 - y_1)^2 + (\hat y_2 - y_2)^2\big]`,
+        String.raw`&= \tfrac12\big[(${t(C.a2[0])} - ${t(y[0])})^2 + (${t(C.a2[1])} - ${t(y[1])})^2\big]`,
+        String.raw`&= \mathbf{${C.L.toFixed(4)}}`]))]) +
       `<p>Da qui parte il backward: vogliamo sapere come cambia $\\mathcal L$ muovendo ciascuno dei 17 parametri.</p>`);
     case 4: return T('Passo 4 · backward · <a href="#bp1">BP1</a>', 'b', 'Errore dello strato di output',
       `<p>Derivata della loss rispetto a $\\hat y$, moltiplicata per la derivata dell'attivazione nel punto $z^{(2)}$ salvato: $\\delta^{(2)}_k = (\\hat y_k - y_k)\\,${g2}'(z^{(2)}_k)$.</p>` +
-      M(String.raw`\begin{aligned}` + [0, 1].map(k => String.raw`\delta^{(2)}_{${k + 1}} &= (${t(C.a2[k])} - ${t(y[k])})\cdot ${t(G.dz2[k])} = ${t(G.d2[k])}`).join(String.raw`\\`) + String.raw`\end{aligned}`) +
+      Bs([0, 1].map(k => B(`Neurone ŷ${k + 1}`, AL([
+        String.raw`\delta^{(2)}_{${k + 1}} &= (\hat y_{${k + 1}} - y_{${k + 1}})\cdot ${g2}'(z^{(2)}_{${k + 1}})`,
+        String.raw`&= (${t(C.a2[k])} - ${t(y[k])})\cdot ${t(G.dz2[k])}`,
+        String.raw`&= \mathbf{${t(G.d2[k])}}`])))) +
       (S.oa === 'sigmoid' ? `<p>Qui $\\sigma'(z) = \\hat y(1-\\hat y)$. Se l'output è saturo (vicino a 0 o 1) questo fattore è piccolo e il gradiente si attenua.</p>` : `<p>Con output lineare $\\mathrm{id}'(z) = 1$, quindi $\\delta^{(2)} = \\hat y - y$.</p>`));
     case 5: return T('Passo 5 · backward · <a href="#bp4">BP4</a>, <a href="#bp3">BP3</a>', 'b', 'Gradienti di W⁽²⁾ e b⁽²⁾',
       `<p>Il gradiente di ogni peso è l'errore del neurone di arrivo per l'attivazione del neurone di partenza. In forma matriciale è un prodotto esterno.</p>` +
-      M(String.raw`\frac{\partial\mathcal L}{\partial W^{(2)}} = \delta^{(2)}\big(a^{(1)}\big)^{\!\top} = \begin{pmatrix}${t(G.d2[0])}\\ ${t(G.d2[1])}\end{pmatrix}\begin{pmatrix}${t(C.a1[0])} & ${t(C.a1[1])} & ${t(C.a1[2])}\end{pmatrix}`) +
-      M(String.raw`= \begin{pmatrix}${G.gW2[0].map(t).join(' & ')}\\ ${G.gW2[1].map(t).join(' & ')}\end{pmatrix},\qquad \frac{\partial\mathcal L}{\partial b^{(2)}} = \delta^{(2)} = \begin{pmatrix}${t(G.d2[0])}\\ ${t(G.d2[1])}\end{pmatrix}`) +
+      Bs([
+        B('Prodotto esterno', String.raw`\frac{\partial\mathcal L}{\partial W^{(2)}} = \delta^{(2)}\big(a^{(1)}\big)^{\!\top} = \begin{pmatrix}${t(G.d2[0])}\\ ${t(G.d2[1])}\end{pmatrix}\begin{pmatrix}${t(C.a1[0])} & ${t(C.a1[1])} & ${t(C.a1[2])}\end{pmatrix}`),
+        B('Risultato (2 × 3, come W⁽²⁾)', String.raw`\frac{\partial\mathcal L}{\partial W^{(2)}} = \begin{pmatrix}${G.gW2[0].map(t).join(' & ')}\\[3pt] ${G.gW2[1].map(t).join(' & ')}\end{pmatrix}`),
+        B('Esempio: un singolo peso', String.raw`\frac{\partial\mathcal L}{\partial w^{(2)}_{11}} = \delta^{(2)}_1\,a^{(1)}_1 = ${p(G.d2[0])}\cdot${p(C.a1[0])} = ${t(G.gW2[0][0])}`),
+        B('Bias', String.raw`\frac{\partial\mathcal L}{\partial b^{(2)}} = \delta^{(2)} = \begin{pmatrix}${t(G.d2[0])}\\ ${t(G.d2[1])}\end{pmatrix}`)]) +
       `<p>Lo spessore degli archi arancioni è proporzionale a $|\\partial\\mathcal L/\\partial w|$.</p>`);
     case 6: return T('Passo 6 · backward · <a href="#bp2">BP2</a>', 'b', 'Errore dello strato nascosto',
       `<p>L'errore torna indietro lungo gli stessi archi, pesato dagli stessi pesi (cioè con $W^{(2)\\top}$), poi viene moltiplicato per $${g1}'(z^{(1)})$.</p>` +
-      M(String.raw`\begin{aligned}` + [0, 1, 2].map(i => String.raw`\delta^{(1)}_{${i + 1}} &= \big(${p(W2[0][i])}\cdot${p(G.d2[0])} + ${p(W2[1][i])}\cdot${p(G.d2[1])}\big)\cdot ${t(G.dz1[i])} = ${t(G.back[i])}\cdot${t(G.dz1[i])} = ${t(G.d1[i])}`).join(String.raw`\\`) + String.raw`\end{aligned}`) +
+      Bs([0, 1, 2].map(i => B(`Neurone h${i + 1}`, AL([
+        String.raw`\delta^{(1)}_{${i + 1}} &= \big(w^{(2)}_{1${i + 1}}\delta^{(2)}_1 + w^{(2)}_{2${i + 1}}\delta^{(2)}_2\big)\cdot ${g1}'(z^{(1)}_{${i + 1}})`,
+        String.raw`&= \big(${p(W2[0][i])}\cdot${p(G.d2[0])} + ${p(W2[1][i])}\cdot${p(G.d2[1])}\big)\cdot ${t(G.dz1[i])}`,
+        String.raw`&= ${p(G.back[i])}\cdot${t(G.dz1[i])}`,
+        String.raw`&= \mathbf{${t(G.d1[i])}}`])))) +
       `<p>Si usano i pesi <b>vecchi</b> $W^{(2)}$: l'aggiornamento avviene solo dopo aver calcolato tutti i gradienti.</p>`);
     case 7: return T('Passo 7 · backward · <a href="#bp4">BP4</a>, <a href="#bp3">BP3</a>', 'b', 'Gradienti di W⁽¹⁾ e b⁽¹⁾',
       `<p>Come al passo 5, ma con $\\delta^{(1)}$ e l'input $x$ come attivazione di partenza.</p>` +
-      M(String.raw`\frac{\partial\mathcal L}{\partial W^{(1)}} = \delta^{(1)}x^{\top} = \begin{pmatrix}${t(G.d1[0])}\\ ${t(G.d1[1])}\\ ${t(G.d1[2])}\end{pmatrix}\begin{pmatrix}${t(x[0])} & ${t(x[1])}\end{pmatrix} = \begin{pmatrix}${G.gW1.map(rw => rw.map(t).join(' & ')).join(String.raw`\\ `)}\end{pmatrix}`) +
-      M(String.raw`\frac{\partial\mathcal L}{\partial b^{(1)}} = \delta^{(1)} = \begin{pmatrix}${t(G.d1[0])}\\ ${t(G.d1[1])}\\ ${t(G.d1[2])}\end{pmatrix}`) +
+      Bs([
+        B('Prodotto esterno', String.raw`\frac{\partial\mathcal L}{\partial W^{(1)}} = \delta^{(1)}x^{\top} = \begin{pmatrix}${t(G.d1[0])}\\ ${t(G.d1[1])}\\ ${t(G.d1[2])}\end{pmatrix}\begin{pmatrix}${t(x[0])} & ${t(x[1])}\end{pmatrix}`),
+        B('Risultato (3 × 2, come W⁽¹⁾)', String.raw`\frac{\partial\mathcal L}{\partial W^{(1)}} = \begin{pmatrix}${G.gW1.map(rw => rw.map(t).join(' & ')).join(String.raw`\\[3pt] `)}\end{pmatrix}`),
+        B('Esempio: un singolo peso', String.raw`\frac{\partial\mathcal L}{\partial w^{(1)}_{11}} = \delta^{(1)}_1\,x_1 = ${p(G.d1[0])}\cdot${p(x[0])} = ${t(G.gW1[0][0])}`),
+        B('Bias', String.raw`\frac{\partial\mathcal L}{\partial b^{(1)}} = \delta^{(1)} = \begin{pmatrix}${t(G.d1[0])}\\ ${t(G.d1[1])}\\ ${t(G.d1[2])}\end{pmatrix}`)]) +
       `<p>Ora abbiamo tutti i 17 gradienti, calcolati con un solo passaggio all'indietro.</p>`);
     case 8: {
       const dL = Cnew.L - C.L;
       return T('Passo 8 · aggiornamento', 'u', 'Discesa del gradiente',
       `<p>Ogni parametro si sposta nella direzione opposta al suo gradiente, di un passo $\\eta = ${S.lr.toFixed(2)}$: $\\;\\theta \\leftarrow \\theta - \\eta\\,\\nabla_\\theta\\mathcal L$. Due esempi:</p>` +
-      M(String.raw`\begin{aligned} w^{(2)}_{11} &\leftarrow ${t(P.W2[0][0])} - ${S.lr.toFixed(2)}\cdot${p(G.gW2[0][0])} = ${t(Pnew.W2[0][0])}\\ w^{(1)}_{11} &\leftarrow ${t(P.W1[0][0])} - ${S.lr.toFixed(2)}\cdot${p(G.gW1[0][0])} = ${t(Pnew.W1[0][0])}\end{aligned}`) +
-      M(String.raw`\mathcal L:\ ${C.L.toFixed(4)}\ \longrightarrow\ ${Cnew.L.toFixed(4)}`) +
+      Bs([
+        B('Peso w⁽²⁾₁₁', AL([String.raw`w^{(2)}_{11} &\leftarrow w^{(2)}_{11} - \eta\,\frac{\partial\mathcal L}{\partial w^{(2)}_{11}}`, String.raw`&= ${t(P.W2[0][0])} - ${S.lr.toFixed(2)}\cdot${p(G.gW2[0][0])}`, String.raw`&= \mathbf{${t(Pnew.W2[0][0])}}`])),
+        B('Peso w⁽¹⁾₁₁', AL([String.raw`w^{(1)}_{11} &\leftarrow w^{(1)}_{11} - \eta\,\frac{\partial\mathcal L}{\partial w^{(1)}_{11}}`, String.raw`&= ${t(P.W1[0][0])} - ${S.lr.toFixed(2)}\cdot${p(G.gW1[0][0])}`, String.raw`&= \mathbf{${t(Pnew.W1[0][0])}}`])),
+        B('Loss prima e dopo', String.raw`\mathcal L:\ ${C.L.toFixed(4)}\ \longrightarrow\ \mathbf{${Cnew.L.toFixed(4)}}`)]) +
       `<p>${dL < 0 ? 'La loss è scesa.' : 'La loss è salita: il learning rate è troppo grande per questo punto. Prova a ridurre η.'} Premi <b>Avanti</b> per ripartire dal forward con i pesi nuovi.</p>`);
     }
   }
